@@ -1,0 +1,8 @@
+site_name: GEEDaR
+repo_url: https://github.com/lucasuchoa98/geedar-lib
+remote_name: lucasuchoa98/geedar-lib
+edit_uri: tree/main/docs
+
+theme:
+  name: material
+  language: pt-BR
