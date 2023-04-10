@@ -6,3 +6,12 @@ edit_uri: tree/main/docs
 theme:
   name: material
   language: pt-BR
+
+markdown_extensions: 
+  - attr_list
+
+plugins:
+- mkdocstrings:
+    handlers:
+      python:
+        paths: [geedar_lib]

@@ -8,6 +8,9 @@ packages = [{include = "geedar_lib"}]
 
 [tool.poetry.dependencies]
 python = "^3.9"
+pandas = "^2.0.0"
+fastkml = "^0.12"
+earthengine-api = "^0.1.348"
 
 
 [tool.poetry.group.dev.dependencies]
