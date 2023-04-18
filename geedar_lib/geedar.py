@@ -1,5 +1,11 @@
+import sys
+import os
 import math
-
+from time import sleep
+import sqlite3
+import pandas as pd
+from shutil import copyfile
+from fastkml import kml
 import ee
 
 ee.Initialize() #realmente necessário?
@@ -680,7 +686,6 @@ REDUCTION_SPECS = {
 REDUCER_LIST = [(str(k) + " (" + REDUCTION_SPECS[k]["description"] + ")") for k in range(len(REDUCTION_SPECS))]    
 
 
-
 # Get the GEEDaR product list.
 def listAvailableProducts() -> list:
     """
@@ -698,7 +703,6 @@ def listProcessingAlgos() -> list:
 
 
 # Get the list of estimation (inversion) algorithms.
-
 def listEstimationAlgos() -> list:
     """
     Essa função retorna a lista de algorítmos de estimação (inversão)
