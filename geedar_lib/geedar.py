@@ -1,4 +1,7 @@
+import math
+
 import ee
+
 ee.Initialize() #realmente necessário?
 
 
@@ -451,7 +454,7 @@ IMG_PROC_ALGO_SPECS = {
         "description": "This algorithm makes no change to the image data.",
         "ref": "",
         "nSimImgs": 500,
-        "applicableTo": available_products
+        "applicableTo": AVAILABLE_PRODUCTS
     },
     1: {
         "name": "StdCloudMask",
@@ -555,6 +558,91 @@ IMG_PROC_ALGO_SPECS = {
 IMG_PROC_ALGO_LIST = [*IMG_PROC_ALGO_SPECS]
 
 
+ESTIMATION_ALGO_SPECS = {
+    0: {
+        "name": "None",
+        "description": "This algorithm makes no calculations and no changes to the images.",
+        "model": "",
+        "ref": "",
+        "paramName": [""],
+        "requiredBands": []
+    },
+    1: {
+        "name": "Former HidroSat chla",
+        "description": "Estima a concentração de clorofila (ug/L) em açudes do Semiárido.",
+        "model": "4.3957 + 0.213*(R - R^2/G) + 0.0004*(R - R^2/G)^2",
+        "ref": "",
+        "paramName": ["chla_surf"],
+        "requiredBands": ["red", "green"]
+    },
+    2: {
+        "name": "SSS Solimões",
+        "description": "Estimates the surface suspended solids concentration in the Solimões River.",
+        "model": "759.12*(NIR/red)^1.9189",
+        "ref": "Villar, R.E.; Martinez, J.M; Armijos, E.; Espinoza, J.C.; Filizola, N.; Dos Santos, A.; Willems, B.; Fraizy, P.; Santini, W.; Vauchel, P. Spatio-temporal monitoring of suspended sediments in the Solimoes River (2000-2014). Comptes Rendus Geoscience, v. 350, n. 1-2, p. 4-12, 2018.",
+        "paramName": ["SS_surf"],
+        "requiredBands": ["red", "NIR"]
+    },
+    3: {
+        "name": "SSS Madeira",
+        "description": "Estimates the surface suspended solids concentration in the Madeira River.",
+        "model": "1020*(NIR/red)^2.94",
+        "ref": "Villar, R.E.; Martinez, J.M.; Le Texier, M.; Guyot, J.L.; Fraizy, P.; Meneses, P.R.; Oliveira, E. A study of sediment transport in the Madeira River, Brazil, using MODIS remote-sensing images. Journal of South American Earth Sciences, v. 44, p. 45-54, 2013.",
+        "paramName": ["SS_surf"],
+        "requiredBands": ["red", "NIR"]
+    },
+    4: {
+        "name": "SSS Óbidos",
+        "description": "Estimates the surface suspended solids concentration in the Amazon River, near Óbidos.",
+        "model": "0.2019*NIR - 14.222",
+        "ref": "Martinez, J. M.; Guyot, J.L.; Filizola, N.; Sondag, F. Increase in suspended sediment discharge of the Amazon River assessed by monitoring network and satellite data. Catena, v. 79, n. 3, p. 257-264, 2009.",
+        "paramName": ["SS_surf"],
+        "requiredBands": ["NIR"]
+    },
+    5: {
+        "name": "Turb Paranapanema",
+        "description": "Estimates the surface turbidity in reservoirs along the Paranapnema river.",
+        "model": "2.45*EXP(0.00223*red)",
+        "ref": "Condé, R.C.; Martinez, J.M.; Pessotto, M.A.; Villar, R.; Cochonneau, G.; Henry, R.; Lopes, W.; Nogueira, M. Indirect Assessment of Sedimentation in Hydropower Dams Using MODIS Remote Sensing Images. Remote Sensing, v.11, n. 3, 2019.",
+        "paramName": ["Turb_surf"],
+        "requiredBands": ["red"]
+    },
+    10: {
+        "name": "Brumadinho_2020simp",
+        "description": "Estimates the surface suspended solids concentration in the Paraopeba River, accounting for the presence of mining waste after the 2019 disaster.",
+        "model": "more than one",
+        "ref": "VENTURA, 2020 (Unpublished).",
+        "paramName": ["SS_surf"],
+        "requiredBands": ["red", "green", "NIR"]
+    },
+    11: {
+        "name": "Açudes SSS-ISS-OSS-Chla",
+        "description": "Estimates four parameters for the waters of Brazilian semiarid reservoirs: surface suspended solids, its organic and inorganic fractions, and chlorophyll-a.",
+        "model": "more than one",
+        "ref": "VENTURA, 2020 (Unpublished).",
+        "paramName": ["SS_surf","ISS_surf","OSS_surf","chla_surf","biomass_surf"],
+        "requiredBands": ["blue", "green", "red", "NIR"]
+    },
+    12: {
+        "name": "Açudes Chla 2022",
+        "description": "Estimates chlorophyll-a in Brazilian semiarid reservoirs.",
+        "model": "-4.227 + 0.1396*G + -0.1006*R",
+        "ref": "VENTURA, 2022 (Unpublished).",
+        "paramName": ["chla_surf"],
+        "requiredBands": ["green", "red"]
+    },
+    99: {
+        "name": "Test",
+        "description": "This algorithm is for test only. It adds a band 'turb_surf' with a constant value of 1234.",
+        "ref": "",
+        "model": "",
+        "paramName": ["turb_surf"],
+        "requiredBands": ["red", "NIR"]
+    }
+}
+ESTIMATION_ALGO_LIST = [*ESTIMATION_ALGO_SPECS]
+
+
 REDUCTION_SPECS = {
     0: {
         "description": "none",
@@ -592,3 +680,212 @@ REDUCTION_SPECS = {
 REDUCER_LIST = [(str(k) + " (" + REDUCTION_SPECS[k]["description"] + ")") for k in range(len(REDUCTION_SPECS))]    
 
 
+
+# Get the GEEDaR product list.
+def listAvailableProducts() -> list:
+    """
+    Essa função retorna uma lista com todos os produtos de satelites disponíveis
+    """
+    return AVAILABLE_PRODUCTS
+
+
+# Get the list of image processing algorithms.
+def listProcessingAlgos() -> list:
+    """
+    Essa função retorna uma lista com todos os algoritmos de processamento disponíveis
+    """
+    return IMG_PROC_ALGO_LIST
+
+
+# Get the list of estimation (inversion) algorithms.
+
+def listEstimationAlgos() -> list:
+    """
+    Essa função retorna a lista de algorítmos de estimação (inversão)
+    """
+    return ESTIMATION_ALGO_LIST
+
+
+# Get the list of GEE image collection IDs related to a given GEEDaR product.
+def getCollection(productID) -> list:
+    """
+    Essa função retorna uma lista com uma coleção de imagens GEE relacionadas a determinado produto GEEDaR
+    """
+    return PRODUCT_SPECS[productID]["collection"].set("product_id", productID)
+
+
+# Given a product ID, get a dictionary with the band names corresponding to spectral regions (blue, green, red, ...).
+def getSpectralBands(productID:int) -> dict:
+    """
+    Essa função retorna um dicionario com os nomes das bandas correspondentes a região espectral a partir de determinada ID de um produto
+    """
+    commonBandsDict = {k: PRODUCT_SPECS[productID]["bandList"][v] for k, v in PRODUCT_SPECS[productID]["commonBands"].items() if v >= 0}
+    spectralBandsList = [PRODUCT_SPECS[productID]["bandList"][v] for v in PRODUCT_SPECS[productID]["spectralBandInds"]]
+    spectralBandsDict = {k: k for k in spectralBandsList}
+    return {**commonBandsDict, **spectralBandsDict}
+
+
+# Unfold the processing code into the IDs of the product and of the pixel selection and inversion algorithms.
+def unfoldProcessingCode(fullCode:int, silent:bool = False):
+    """
+    Desempacota o código de processamento no ID dos produtos na seleção de pixels e no algorítmo de inversão
+    """
+    failValues = (None, None, None, None, None)
+    fullCode = str(fullCode)
+    
+    if len(fullCode) < 8:
+        if not silent:
+            raise Exception("Unrecognized processing code: '" + fullCode + "'. It must be a list of integers in the form PPPSSRRA (PPP is one of the product IDs listed by '-h:products'; SS is the code of the pixel selection algorithm; RR, the code of the processing algorithm; and A, the code of the reducer.).")
+        else:
+            return failValues
+    
+    if fullCode[0] == "[" and fullCode[-1] == "]":
+        fullCode = fullCode[1:-1]
+        
+    strCodes = fullCode.replace(" ", "").split(",")
+    
+    processingCodes = []
+    productIDs = []
+    imgProcAlgos = []
+    estimationAlgos = []
+    reducers = []
+    
+    for strCode in strCodes:
+        try:
+            code = int(strCode)
+        except:
+            if not silent:
+                print("(!)")
+                raise Exception("Unrecognized processing code: '" + strCode + "'. It should be an integer in the form PPPSSRRA (PPP is one of the product IDs listed by '-h:products'; SS is the code of the pixel selection algorithm; RR, the code of the processing algorithm; and A, the code of the reducer.).")
+            else:
+                return failValues
+        if code < 10000000:
+            if not silent:
+                print("(!)")
+                raise Exception("Unrecognized processing code: '" + strCode + "'.")
+            else:
+                return failValues
+        
+        processingCodes.append(code)
+        
+        productID = int(strCode[0:3])
+        if not productID in AVAILABLE_PRODUCTS:
+            if not silent:
+                print("(!)")
+                raise Exception("The product ID '" + str(productID) + "' derived from the processing code '" + strCode + "' was not recognized.")
+            else:
+                return failValues
+        productIDs.append(productID)
+        
+        imgProcAlgo = int(strCode[3:5])
+        if not imgProcAlgo in IMG_PROC_ALGO_LIST:
+            if not silent:
+                print("(!)")
+                raise Exception("The image processing algorithm ID '" + str(imgProcAlgo) + "' derived from the processing code '" + strCode + "' was not recognized.")
+            else:
+                return failValues
+        imgProcAlgos.append(imgProcAlgo)
+        
+        estimationAlgo = int(strCode[5:7])
+        if not estimationAlgo in ESTIMATION_ALGO_LIST:
+            if not silent:
+                print("(!)")
+                raise Exception("The estimation algorithm ID '" + str(estimationAlgo) + "' derived from the processing code '" + strCode + "' was not recognized.")
+            else:
+                return failValues
+        estimationAlgos.append(estimationAlgo)
+        
+        reducer = int(strCode[-1])
+        if not reducer in range(len(REDUCER_LIST)):
+            if not silent:
+                print("(!)")
+                raise Exception("The reducer code '" + str(reducer) + "' in the processing code '" + strCode + "' was not recognized. The reducer code must correspond to an index of the reducer list: " + str(REDUCER_LIST) + ".")
+            else:
+                return failValues
+        reducers.append(reducer)
+    
+    return processingCodes, productIDs, imgProcAlgos, estimationAlgos, reducers
+
+
+# Mask bad pixels based on the respective "pixel quality assurance" layer.
+def qaMask_collection(productID, imageCollection, addBand = False):
+    """
+    Retorna a uma coleção de imagens baseada na definição de qualidade pixel determinada pelo usuário
+    """
+    qaLayerName = PRODUCT_SPECS[productID]["qaLayer"]
+    if qaLayerName == "" or qaLayerName == []:
+        if addBand:
+            return ee.ImageCollection(imageCollection).map(lambda image: image.addBands(ee.Image(1).rename("qa_mask")))
+        else:
+            return ee.ImageCollection(imageCollection)
+    
+    # MODIS bands 1-7 (Terra and Aqua)
+    if productID in range(100, 120):
+        qaLayer = [qaLayerName[0], qaLayerName[0], qaLayerName[0]]
+        startBit = [0, 6, 8]
+        endBit = [2, 7, 9]
+        testExpression = ["b(0) == 0", "b(0) < 2", "b(0) == 0"]
+    # Sentinel-2 L2A
+    elif productID == 201:
+        qaLayer = [qaLayerName[0]]
+        startBit = [0]
+        endBit = [7]
+        testExpression = ["b(0) >= 4 && b(0) <= 7"]
+    # Sentinel-2 L1C
+    elif productID == 202:
+        qaLayer = [qaLayerName[0]]
+        startBit = [10]
+        endBit = [11]
+        testExpression = ["b(0) == 0"]
+    # Landsat 5 and 7 SR Collection 1
+    elif productID in [301,302]:
+        qaLayer = [qaLayerName[0]]
+        startBit = [3]
+        endBit = [5]
+        testExpression = ["b(0) == 0"]
+    # Landsat 8 SR Collection 1
+    elif productID in [303]:
+        qaLayer = [qaLayerName[0],qaLayerName[1]]
+        startBit = [3,6]
+        endBit = [5,7]
+        testExpression = ["b(0) == 0", "b(0) <= 1"]
+    # Landsat 4, 5 and 7 Level 2 Collection 2
+    elif productID in [311,312,313]:
+        qaLayer = [qaLayerName[0]]
+        startBit = [1]
+        endBit = [5]
+        testExpression = ["b(0) == 0"]
+    # Landsat 8 and 9 Level 2 Collection 2
+    elif productID in [314,315]:
+        qaLayer = [qaLayerName[0],qaLayerName[1]]
+        startBit = [1,6]
+        endBit = [5,7]
+        testExpression = ["b(0) == 0", "b(0) <= 1"]
+    # VIIRS
+    elif productID in [151,152]:
+        qaLayer = [qaLayerName[0],qaLayerName[1]]
+        startBit = [2,3]
+        endBit = [4,7]
+        testExpression = ["b(0) == 0", "b(0) == 0"]
+    else:
+        if addBand:
+            return ee.ImageCollection(imageCollection).map(lambda image: image.addBands(ee.Image(1).rename("qa_mask")))
+        else:
+            return ee.ImageCollection(imageCollection)
+    
+    maskVals = []
+    for i in range(len(startBit)):
+        bitToInt = 0
+        for j in range(startBit[i], endBit[i] + 1):
+            bitToInt = bitToInt + int(math.pow(2, j))
+        maskVals.append(bitToInt)
+    
+    def qaMask(image):
+      mask = ee.Image(1)
+      for i in range(len(maskVals)):
+        mask = mask.And(image.select(qaLayer[i]).int().bitwiseAnd(maskVals[i]).rightShift(startBit[i]).expression(testExpression[i]));
+      if addBand:
+        image = image.addBands(mask.rename("qa_mask"))
+      return image.updateMask(mask);
+
+    return ee.ImageCollection(imageCollection).map(qaMask)
