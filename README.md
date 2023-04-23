@@ -1,6 +1,6 @@
 # Google Earth Engine Data Retriever (GEEDaR)
 
-[![Documentation Status](https://readthedocs.org/projects/geedar-lib/badge/?version=latest)](https://geedar-lib.readthedocs.io/en/latest/?badge=latest) ![CI](https://github.com/lucasuchoa98/geedar-lib/actions/workflows/pipeline.yaml/badge.svg)
+[![Documentation Status](https://readthedocs.org/projects/geedar-lib/badge/?version=latest)](https://geedar-lib.readthedocs.io/en/latest/?badge=latest)
 Este script destina-se a recuperar dados do Google Earth Engine.
 Com base na lista fornecida de sites e datas e nos algoritmos de processamento escolhidos,
 ele recupera os dados de satélite correspondentes.
