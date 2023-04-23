@@ -8,714 +8,72 @@ from shutil import copyfile
 from fastkml import kml
 import ee
 
-from utils import (wich, writeToLogFile, polygonFromKML)
+from geedar_lib.utils import (which, writeToLogFile, 
+                              polygonFromKML, unfoldProcessingCode)
+
+from geedar_lib.utils import (PRODUCT_SPECS, AVAILABLE_PRODUCTS,
+                              IMG_PROC_ALGO_SPECS, IMG_PROC_ALGO_LIST,
+                              ESTIMATION_ALGO_SPECS, ESTIMATION_ALGO_LIST,
+                              REDUCTION_SPECS)
 
 ee.Initialize() #realmente necessário?
 
-
-# Dictionary for the GEEDaR products.
-## Product ID format: FP
-### F: sensor "Family" (1 = MODIS, 2 = Sentinel, 3 = Landsat, 4 = VIIRS...)
-### P: product (e.g. 01 = MOD09GA, 02 = MYD09GA, 03 = MOD09GQ, ...)
-
-PRODUCT_SPECS = {
-    101: {
-        "productName": "MOD09GA",
-        "sensor": "MODIS/Terra",
-        "description": "Daily MODIS/Terra 500-m images, bands 1-7, processing version 6",
-        "collectionID": ["MODIS/006/MOD09GA"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09GA"),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 500,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QC_500m", "state_1km", "SensorZenith", "SensorAzimuth", "SolarZenith", "SolarAzimuth"],
-        "qaLayer": ["state_1km"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    102: {
-        "productName": "MYD09GA",
-        "sensor": "MODIS/Aqua",
-        "description": "Daily MODIS/Aqua 500-m images, bands 1-7, processing version 6",
-        "collectionID": ["MODIS/006/MYD09GA"],
-        "collection": ee.ImageCollection("MODIS/006/MYD09GA"),
-        "startDate": "2002-07-04",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 500,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QC_500m", "state_1km", "SensorZenith", "SensorAzimuth", "SolarZenith", "SolarAzimuth"],
-        "qaLayer": ["state_1km"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    103: {
-        "productName": "MOD09GQ",
-        "sensor": "MODIS/Terra",
-        "description": "Daily MODIS/Terra 250-m images, bands 1-2, processing version 6",
-        "collectionID": ["MODIS/006/MOD09GQ"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09GQ"),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "QC_250m"],
-        "qaLayer": [],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(2)],
-        "commonBands": {"blue": -1, "green": -1, "red": 0, "NIR": 1, "SWIR": -1, "wl400": -1, "wl440": -1, "wl490": -1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": -1, "wl1500": -1, "wl2000": -1, "wl10500": -1, "wl11500": -1}
-    },
-    104: {
-        "productName": "MYD09GQ",
-        "sensor": "MODIS/Aqua",
-        "description": "Daily MODIS/Aqua 250-m images, bands 1-2, processing version 6",
-        "collectionID": ["MODIS/006/MYD09GQ"],
-        "collection": ee.ImageCollection("MODIS/006/MYD09GQ"),
-        "startDate": "2002-07-04",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "QC_250m"],
-        "qaLayer": [],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(2)],
-        "commonBands": {"blue": -1, "green": -1, "red": 0, "NIR": 1, "SWIR": -1, "wl400": -1, "wl440": -1, "wl490": -1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": -1, "wl1500": -1, "wl2000": -1, "wl10500": -1, "wl11500": -1}
-    },
-    105: {
-        "productName": "MOD09GAGQ",
-        "sensor": "MODIS/Terra",
-        "description": "Daily MODIS/Terra images, with bands 1-2 in 250 m and bands 3-7 in 500 m, processing version 6",
-        "collectionID": ["MODIS/006/MOD09GA", "MODIS/006/MOD09GQ"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09GA").combine(ee.ImageCollection("MODIS/006/MOD09GQ"), True),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QC_500m", "state_1km", "SensorZenith", "SensorAzimuth", "SolarZenith", "SolarAzimuth", "QC_250m"],
-        "qaLayer": ["state_1km"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    106: {
-        "productName": "MYD09GAGQ",
-        "sensor": "MODIS/Aqua",
-        "description": "Daily MODIS/Aqua images, with bands 1-2 in 250 m and bands 3-7 in 500 m, processing version 6",
-        "collectionID": ["MODIS/006/MYD09GA", "MODIS/006/MYD09GQ"],
-        "collection": ee.ImageCollection("MODIS/006/MYD09GA").combine(ee.ImageCollection("MODIS/006/MYD09GQ"), True),
-        "startDate": "2002-07-04",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QC_500m", "state_1km", "SensorZenith", "SensorAzimuth", "SolarZenith", "SolarAzimuth", "QC_250m"],
-        "qaLayer": ["state_1km"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    107: {
-        "productName": "MODMYD09GAGQ",
-        "sensor": "MODIS/Terra&Aqua",
-        "description": "Combined MODIS/Aqua and MODIS/Terra daily images, with bands 1-2 in 250 m and bands 3-7 in 500 m, processing version 6",
-        "collectionID": ["MODIS/006/MOD09GA", "MODIS/006/MOD09GQ", "MODIS/006/MYD09GA", "MODIS/006/MYD09GQ"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09GA").combine(ee.ImageCollection("MODIS/006/MOD09GQ"), True).merge(ee.ImageCollection("MODIS/006/MYD09GA").combine(ee.ImageCollection("MODIS/006/MYD09GQ"), True)).sort('system:time_start'),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QC_500m", "state_1km", "SensorZenith", "SensorAzimuth", "SolarZenith", "SolarAzimuth"],
-        "qaLayer": ["state_1km"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    111: {
-        "productName": "MOD09A1",
-        "sensor": "MODIS/Terra",
-        "description": "8-day composite MODIS/Terra 500-m images, bands 1-7, processing version 6",
-        "collectionID": ["MODIS/006/MOD09A1"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09A1"),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 500,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QA", "SolarZenith", "ViewZenith", "RelativeAzimuth", "StateQA", "DayOfYear"],
-        "qaLayer": ["StateQA"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    112: {
-        "productName": "MYD09A1",
-        "sensor": "MODIS/Aqua",
-        "description": "8-day composite MODIS/Aqua 500-m images, bands 1-7, processing version 6",
-        "collectionID": ["MODIS/006/MYD09A1"],
-        "collection": ee.ImageCollection("MODIS/006/MYD09A1"),
-        "startDate": "2002-07-04",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 500,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QA", "SolarZenith", "ViewZenith", "RelativeAzimuth", "StateQA", "DayOfYear"],
-        "qaLayer": ["StateQA"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    113: {
-        "productName": "MOD09Q1",
-        "sensor": "MODIS/Terra",
-        "description": "8-day composite MODIS/Terra 250-m images, bands 1-2, processing version 6",
-        "collectionID": ["MODIS/006/MOD09Q1"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09Q1"),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "State", "QA"],
-        "qaLayer": ["State"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(2)],
-        "commonBands": {"blue": -1, "green": -1, "red": 0, "NIR": 1, "SWIR": -1, "wl400": -1, "wl440": -1, "wl490": -1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": -1, "wl1500": -1, "wl2000": -1, "wl10500": -1, "wl11500": -1}
-    },
-    114: {
-        "productName": "MYD09Q1",
-        "sensor": "MODIS/Aqua",
-        "description": "8-day composite MODIS/Aqua 250-m images, bands 1-2, processing version 6",
-        "collectionID": ["MODIS/006/MYD09Q1"],
-        "collection": ee.ImageCollection("MODIS/006/MYD09Q1"),
-        "startDate": "2002-07-04",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "State", "QA"],
-        "qaLayer": ["State"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(2)],
-        "commonBands": {"blue": -1, "green": -1, "red": 0, "NIR": 1, "SWIR": -1, "wl400": -1, "wl440": -1, "wl490": -1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": -1, "wl1500": -1, "wl2000": -1, "wl10500": -1, "wl11500": -1}
-    },
-    115: {
-        "productName": "MOD09A1Q1",
-        "sensor": "MODIS/Terra",
-        "description": "8-day composite MODIS/Terra images, with bands 1-2 in 250 m and bands 3-7 in 500 m, processing version 6",
-        "collectionID": ["MODIS/006/MOD09A1", "MODIS/006/MOD09Q1"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09A1").combine(ee.ImageCollection("MODIS/006/MOD09Q1"), True),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QA", "SolarZenith", "ViewZenith", "RelativeAzimuth", "StateQA", "DayOfYear", "State"],
-        "qaLayer": ["State"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    116: {
-        "productName": "MYD09A1Q1",
-        "sensor": "MODIS/Aqua",
-        "description": "8-day composite MODIS/Aqua images, with bands 1-2 in 250 m and bands 3-7 in 500 m, processing version 6",
-        "collectionID": ["MODIS/006/MYD09A1", "MODIS/006/MYD09Q1"],
-        "collection": ee.ImageCollection("MODIS/006/MYD09A1").combine(ee.ImageCollection("MODIS/006/MYD09Q1"), True),
-        "startDate": "2002-07-04",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QA", "SolarZenith", "ViewZenith", "RelativeAzimuth", "StateQA", "DayOfYear", "State"],
-        "qaLayer": ["State"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    117: {
-        "productName": "MODMYD09A1Q1",
-        "sensor": "MODIS/Terra&Aqua",
-        "description": "Combined MODIS/Aqua and MODIS/Terra 8-day composite images, with bands 1-2 in 250 m and bands 3-7 in 500 m, processing version 6",
-        "collectionID": ["MODIS/006/MOD09A1", "MODIS/006/MOD09Q1", "MODIS/006/MYD09A1", "MODIS/006/MYD09Q1"],
-        "collection": ee.ImageCollection("MODIS/006/MOD09A1").combine(ee.ImageCollection("MODIS/006/MOD09Q1"), True).merge(ee.ImageCollection("MODIS/006/MYD09A1").combine(ee.ImageCollection("MODIS/006/MYD09Q1"), True)).sort('system:time_start'),
-        "startDate": "2000-02-24",
-        "scaleRefBand": "sur_refl_b01",
-        "roughScale": 250,
-        "bandList": ["sur_refl_b01", "sur_refl_b02", "sur_refl_b03", "sur_refl_b04", "sur_refl_b05", "sur_refl_b06", "sur_refl_b07", "QA", "SolarZenith", "ViewZenith", "RelativeAzimuth", "StateQA", "DayOfYear", "State"],
-        "qaLayer": ["State"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 2, "green": 3, "red": 0, "NIR": 1, "SWIR": 5, "wl400": -1, "wl440": -1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 1, "wl900": -1, "wl1200": 4, "wl1500": 5, "wl2000": 6, "wl10500": -1, "wl11500": -1}
-    },
-    151: {
-        "productName": "VNP09GA",
-        "sensor": "VIIRS",
-        "description": "VIIRS Surface Reflectance Daily with standard blue, green, red and NIR bands set to M3, M4 (1 km), I1 and I2 (500m).",
-        "collectionID": ["NOAA/VIIRS/001/VNP09GA"],
-        "collection": ee.ImageCollection("NOAA/VIIRS/001/VNP09GA"),
-        "startDate": "2012-01-19",
-        "scaleRefBand": "I1",
-        "roughScale": 500,
-        "bandList": ["M1", "M2", "M3", "M4", "M5", "M7", "M8", "M10", "M11", "I1", "I2", "I3", "SensorAzimuth", "SensorZenith", "SolarAzimuth", "SolarZenith", "iobs_res", "num_observations_1km", "num_observations_500m", "obscov_1km", "obscov_500m", "orbit_pnt", "QF1", "QF2", "QF3", "QF4", "QF5", "QF6", "QF7"],
-        "qaLayer": ["QF1", "QF2"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(12)],
-        "commonBands": {"blue": 2, "green": 3, "red": 9, "NIR": 10, "SWIR": 11, "wl400": 0, "wl440": 1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": 4, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 10, "wl900": -1, "wl1200": 6, "wl1500": 11, "wl2000": 8, "wl10500": -1, "wl11500": -1}
-    },
-    152: {
-        "productName": "VNP09GA",
-        "sensor": "VIIRS",
-        "description": "VIIRS Surface Reflectance Daily with standard blue, green, red and NIR bands set to M3, M4, M5 and M10 (1 km).",
-        "collectionID": ["NOAA/VIIRS/001/VNP09GA"],
-        "collection": ee.ImageCollection("NOAA/VIIRS/001/VNP09GA"),
-        "startDate": "2012-01-19",
-        "scaleRefBand": "M5",
-        "roughScale": 1000,
-        "bandList": ["M1", "M2", "M3", "M4", "M5", "M7", "M8", "M10", "M11", "SensorAzimuth", "SensorZenith", "SolarAzimuth", "SolarZenith", "iobs_res", "num_observations_1km", "num_observations_500m", "obscov_1km", "obscov_500m", "orbit_pnt", "QF1", "QF2", "QF3", "QF4", "QF5", "QF6", "QF7"],
-        "qaLayer": ["QF1", "QF2"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(9)],
-        "commonBands": {"blue": 2, "green": 3, "red": 4, "NIR": 5, "SWIR": 7, "wl400": 0, "wl440": 1, "wl490": 2, "wl620": -1, "wl665": -1, "wl675": 4, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 5, "wl900": -1, "wl1200": 6, "wl1500": 7, "wl2000": 8, "wl10500": -1, "wl11500": -1}
-    },
-    201: {
-        "productName": "S2_L2A",
-        "sensor": "MSI/Sentinel-2",
-        "description": "Sentinel-2 L2A images provided by ESA.",
-        "collectionID": ["COPERNICUS/S2_SR_HARMONIZED"],
-        "collection": ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED"),
-        "startDate": "2015-06-27",
-        "scaleRefBand": "B4",
-        "roughScale": 10,
-        "bandList": ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B11", "B12", "AOT", "WVP", "SCL", "TCI_R", "TCI_G", "TCI_B", "MSK_CLDPRB", "MSK_SNWPRB", "QA10", "QA20", "QA60"],
-        "qaLayer": ["SCL"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(12)],
-        "commonBands": {"blue": 1, "green": 2, "red": 3, "NIR": 7, "SWIR": 10, "wl400": -1, "wl440": 0, "wl490": 1, "wl620": -1, "wl665": 3, "wl675": -1, "wl680": -1, "wl705": 4, "wl740": 5, "wl780": 6, "wl800": 8, "wl900": 9, "wl1200": -1, "wl1500": 10, "wl2000": 11, "wl10500": -1, "wl11500": -1}
-    },
-    202: {
-        "productName": "S2_L1C",
-        "sensor": "MSI/Sentinel-2",
-        "description": "Sentinel-2 L1C images provided by ESA.",
-        "collectionID": ["COPERNICUS/S2_HARMONIZED"],
-        "collection": ee.ImageCollection("COPERNICUS/S2_HARMONIZED"),
-        "startDate": "2015-06-27",
-        "scaleRefBand": "B4",
-        "roughScale": 10,
-        "bandList": ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B11", "B12", "QA10", "QA20", "QA60"],
-        "qaLayer": ["QA60"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(12)],
-        "commonBands": {"blue": 1, "green": 2, "red": 3, "NIR": 7, "SWIR": 10, "wl400": -1, "wl440": 0, "wl490": 1, "wl620": -1, "wl665": 3, "wl675": -1, "wl680": -1, "wl705": 4, "wl740": 5, "wl780": 6, "wl800": 8, "wl900": 9, "wl1200": -1, "wl1500": 10, "wl2000": 11, "wl10500": -1, "wl11500": -1}
-    },
-    301: {
-        "productName": "Landsat_5_SR_Collection1",
-        "sensor": "TM/Landsat 5",
-        "description": "Landsat 5 surface reflectance images (Collection 1).",
-        "collectionID": ["LANDSAT/LT05/C01/T1_SR", "LANDSAT/LT05/C01/T2_SR"],
-        "collection": ee.ImageCollection("LANDSAT/LT05/C01/T1_SR").merge(ee.ImageCollection("LANDSAT/LT05/C01/T2_SR")),
-        "startDate": "1984-03-16",
-        "scaleRefBand": "B3",
-        "roughScale": 30,
-        "bandList": ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "sr_atmos_opacity", "sr_cloud_qa", "pixel_qa", "radsat_qa"],
-        "qaLayer": ["pixel_qa"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 0, "green": 1, "red": 2, "NIR": 3, "SWIR": 4, "wl400": -1, "wl440": -1, "wl490": 0, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 3, "wl900": -1, "wl1200": -1, "wl1500": 4, "wl2000": 6, "wl10500": -1, "wl11500": 5}
-    },
-    302: {
-        "productName": "Landsat_7_SR_Collection1",
-        "sensor": "ETM+/Landsat 7",
-        "description": "Landsat 7 surface reflectance images (Collection 1).",
-        "collectionID": ["LANDSAT/LE07/C01/T1_SR", "LANDSAT/LE07/C01/T2_SR"],
-        "collection": ee.ImageCollection("LANDSAT/LE07/C01/T1_SR").merge(ee.ImageCollection("LANDSAT/LE07/C01/T2_SR")),
-        "startDate": "1999-05-28",
-        "scaleRefBand": "B3",
-        "roughScale": 30,
-        "bandList": ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "sr_atmos_opacity", "sr_cloud_qa", "pixel_qa", "radsat_qa"],
-        "qaLayer": ["pixel_qa"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(7)],
-        "commonBands": {"blue": 0, "green": 1, "red": 2, "NIR": 3, "SWIR": 4, "wl400": -1, "wl440": -1, "wl490": 0, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 3, "wl900": -1, "wl1200": -1, "wl1500": 4, "wl2000": 6, "wl10500": -1, "wl11500": 5}
-    },
-    303: {
-        "productName": "Landsat_8_SR_Collection1",
-        "sensor": "OLI/Landsat 8",
-        "description": "Landsat 8 surface reflectance images (Collection 1).",
-        "collectionID": ["LANDSAT/LC08/C01/T1_SR", "LANDSAT/LC08/C01/T2_SR"],
-        "collection": ee.ImageCollection("LANDSAT/LC08/C01/T1_SR").merge(ee.ImageCollection("LANDSAT/LC08/C01/T2_SR")),
-        "startDate": "2013-03-18",
-        "scaleRefBand": "B4",
-        "roughScale": 30,
-        "bandList": ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B10", "B11", "sr_aerosol", "pixel_qa", "radsat_qa"],
-        "qaLayer": ["pixel_qa", "sr_aerosol"],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [*range(9)],
-        "commonBands": {"blue": 1, "green": 2, "red": 3, "NIR": 4, "SWIR": 5, "wl400": -1, "wl440": 0, "wl490": 1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 4, "wl900": -1, "wl1200": -1, "wl1500": 5, "wl2000": 6, "wl10500": 7, "wl11500": 8}
-    },
-    311: {
-        "productName": "Landsat_4_L2_Collection2",
-        "sensor": "TM/Landsat 4",
-        "description": "Landsat 4 surface reflectance images (Collection 2) provided by the USGS.",
-        "collectionID": ["LANDSAT/LT04/C02/T1_L2", "LANDSAT/LT04/C02/T2_L2"],
-        "collection": ee.ImageCollection("LANDSAT/LT04/C02/T1_L2").merge(ee.ImageCollection("LANDSAT/LT04/C02/T2_L2")),
-        "startDate": "1982-08-22",
-        "scaleRefBand": "SR_B3",
-        "roughScale": 30,
-        "bandList": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "SR_ATMOS_OPACITY", "SR_CLOUD_QA", "ST_B6", "ST_ATRAN", "ST_CDIST", "ST_DRAD", "ST_EMIS", "ST_EMSD", "ST_QA", "ST_TRAD", "ST_URAD", "QA_PIXEL", "QA_RADSAT"],
-        "qaLayer": ["QA_PIXEL"],
-        "scalingFactor": [0.275] * 6 + [0.001, 1, 0.00341802, 0.0001, 0.01, 0.001, 0.0001, 0.0001, 0.01, 0.001, 0.001, 1, 1],
-        "offset": [-2000] * 6 + [0, 0, -124, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "spectralBandInds": [*range(6)] + [8],
-        "commonBands": {"blue": 0, "green": 1, "red": 2, "NIR": 3, "SWIR": 4, "wl400": -1, "wl440": -1, "wl490": 0, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 3, "wl900": -1, "wl1200": -1, "wl1500": 4, "wl2000": 5, "wl10500": -1, "wl11500": 8}
-    },
-    312: {
-        "productName": "Landsat_5_L2_Collection2",
-        "sensor": "TM/Landsat 5",
-        "description": "Landsat 5 surface reflectance images (Collection 2) provided by the USGS.",
-        "collectionID": ["LANDSAT/LT05/C02/T1_L2", "LANDSAT/LT05/C02/T2_L2"],
-        "collection": ee.ImageCollection("LANDSAT/LT05/C02/T1_L2").merge(ee.ImageCollection("LANDSAT/LT05/C02/T2_L2")),
-        "startDate": "1984-03-16",
-        "scaleRefBand": "SR_B3",
-        "roughScale": 30,
-        "bandList": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "SR_ATMOS_OPACITY", "SR_CLOUD_QA", "ST_B6", "ST_ATRAN", "ST_CDIST", "ST_DRAD", "ST_EMIS", "ST_EMSD", "ST_QA", "ST_TRAD", "ST_URAD", "QA_PIXEL", "QA_RADSAT"],
-        "qaLayer": ["QA_PIXEL"],
-        "scalingFactor": [0.275] * 6 + [0.001, 1, 0.00341802, 0.0001, 0.01, 0.001, 0.0001, 0.0001, 0.01, 0.001, 0.001, 1, 1],
-        "offset": [-2000] * 6 + [0, 0, -124, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "spectralBandInds": [*range(6)] + [8],
-        "commonBands": {"blue": 0, "green": 1, "red": 2, "NIR": 3, "SWIR": 4, "wl400": -1, "wl440": -1, "wl490": 0, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 3, "wl900": -1, "wl1200": -1, "wl1500": 4, "wl2000": 5, "wl10500": -1, "wl11500": 8}
-    },
-    313: {
-        "productName": "Landsat_7_L2_Collection2",
-        "sensor": "ETM+/Landsat 7",
-        "description": "Landsat 7 surface reflectance images (Collection 2) provided by the USGS.",
-        "collectionID": ["LANDSAT/LE07/C02/T1_L2", "LANDSAT/LE07/C02/T2_L2"],
-        "collection": ee.ImageCollection("LANDSAT/LE07/C02/T1_L2").merge(ee.ImageCollection("LANDSAT/LE07/C02/T2_L2")),
-        "startDate": "1999-05-28",
-        "scaleRefBand": "SR_B3",
-        "roughScale": 30,
-        "bandList": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B7", "SR_ATMOS_OPACITY", "SR_CLOUD_QA", "ST_B6", "ST_ATRAN", "ST_CDIST", "ST_DRAD", "ST_EMIS", "ST_EMSD", "ST_QA", "ST_TRAD", "ST_URAD", "QA_PIXEL", "QA_RADSAT"],
-        "qaLayer": ["QA_PIXEL"],
-        "scalingFactor": [0.275] * 6 + [0.001, 1, 0.00341802, 0.0001, 0.01, 0.001, 0.0001, 0.0001, 0.01, 0.001, 0.001, 1, 1],
-        "offset": [-2000] * 6 + [0, 0, -124, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "spectralBandInds": [*range(6)] + [8],
-        "commonBands": {"blue": 0, "green": 1, "red": 2, "NIR": 3, "SWIR": 4, "wl400": -1, "wl440": -1, "wl490": 0, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 3, "wl900": -1, "wl1200": -1, "wl1500": 4, "wl2000": 5, "wl10500": -1, "wl11500": 8}
-    },
-    314: {
-        "productName": "Landsat_8_L2_Collection2",
-        "sensor": "OLI/Landsat 8",
-        "description": "Landsat 8 surface reflectance images (Collection 2) provided by the USGS.",
-        "collectionID": ["LANDSAT/LC08/C02/T1_L2","LANDSAT/LC08/C02/T2_L2"],
-        "collection": ee.ImageCollection("LANDSAT/LC08/C02/T1_L2").merge(ee.ImageCollection("LANDSAT/LC08/C02/T2_L2")),
-        "startDate": "2013-03-18",
-        "scaleRefBand": "SR_B4",
-        "roughScale": 30,
-        "bandList": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7", "SR_QA_AEROSOL", "ST_B10", "ST_ATRAN", "ST_CDIST", "ST_DRAD", "ST_EMIS", "ST_EMSD", "ST_QA", "ST_TRAD", "ST_URAD", "QA_PIXEL", "QA_RADSAT"],
-        "qaLayer": ["QA_PIXEL","SR_QA_AEROSOL"],
-        "scalingFactor": [0.275] * 7 + [1, 0.00341802, 0.0001, 0.01, 0.001, 0.0001, 0.0001, 0.01, 0.001, 0.001, 1, 1],
-        "offset": [-2000] * 7 + [0, -124, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "spectralBandInds": [*range(7)] + [8],
-        "commonBands": {"blue": 1, "green": 2, "red": 3, "NIR": 4, "SWIR": 5, "wl400": -1, "wl440": 0, "wl490": 1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 4, "wl900": -1, "wl1200": -1, "wl1500": 5, "wl2000": 6, "wl10500": 8, "wl11500": -1}
-    },
-    315: {
-        "productName": "Landsat_9_L2_Collection2",
-        "sensor": "OLI/Landsat 9",
-        "description": "Landsat 8 surface reflectance images (Collection 2) provided by the USGS.",
-        "collectionID": ["LANDSAT/LC09/C02/T1_L2","LANDSAT/LC09/C02/T2_L2"],
-        "collection": ee.ImageCollection("LANDSAT/LC09/C02/T1_L2").merge(ee.ImageCollection("LANDSAT/LC09/C02/T2_L2")),
-        "startDate": "2021-10-31",
-        "scaleRefBand": "SR_B4",
-        "roughScale": 30,
-        "bandList": ["SR_B1", "SR_B2", "SR_B3", "SR_B4", "SR_B5", "SR_B6", "SR_B7", "SR_QA_AEROSOL", "ST_B10", "ST_ATRAN", "ST_CDIST", "ST_DRAD", "ST_EMIS", "ST_EMSD", "ST_QA", "ST_TRAD", "ST_URAD", "QA_PIXEL", "QA_RADSAT"],
-        "qaLayer": ["QA_PIXEL","SR_QA_AEROSOL"],
-        "scalingFactor": [0.275] * 7 + [1, 0.00341802, 0.0001, 0.01, 0.001, 0.0001, 0.0001, 0.01, 0.001, 0.001, 1, 1],
-        "offset": [-2000] * 7 + [0, -124, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-        "spectralBandInds": [*range(7)] + [8],
-        "commonBands": {"blue": 1, "green": 2, "red": 3, "NIR": 4, "SWIR": 5, "wl400": -1, "wl440": 0, "wl490": 1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": 4, "wl900": -1, "wl1200": -1, "wl1500": 5, "wl2000": 6, "wl10500": 8, "wl11500": -1}
-    },
-    901: {
-        "productName": "GPM_Precipitation_v6",
-        "sensor": "GPM",
-        "description": "Global Precipitation Measurement (GPM) v6.",
-        "collectionID": ["NASA/GPM_L3/IMERG_V06"],
-        "collection": ee.ImageCollection("NASA/GPM_L3/IMERG_V06"),
-        "startDate": "2000-06-01",
-        "scaleRefBand": "precipitationCal",
-        "roughScale": 11132,
-        "bandList": ["HQobservationTime", "HQprecipSource", "HQprecipitation", "IRkalmanFilterWeight", "IRprecipitation", "precipitationCal", "precipitationUncal", "probabilityLiquidPrecipitation", "randomError"],
-        "qaLayer": [],
-        "scalingFactor": None,
-        "offset": None,
-        "spectralBandInds": [5],
-        "commonBands": {"blue": -1, "green": -1, "red": -1, "NIR": -1, "SWIR": -1, "wl400": -1, "wl440": -1, "wl490": -1, "wl620": -1, "wl665": -1, "wl675": -1, "wl680": -1, "wl705": -1, "wl740": -1, "wl780": -1, "wl800": -1, "wl900": -1, "wl1200": -1, "wl1500": -1, "wl2000": -1, "wl10500": -1, "wl11500": -1}
-    }
-}
-AVAILABLE_PRODUCTS = [*PRODUCT_SPECS]
-
-
-# Image processing (atmospheric correction and unwanted pixels' exclusion) algorithms:
-IMG_PROC_ALGO_SPECS = {
-    0: {
-        "name": "None",
-        "description": "This algorithm makes no change to the image data.",
-        "ref": "",
-        "nSimImgs": 500,
-        "applicableTo": AVAILABLE_PRODUCTS
-    },
-    1: {
-        "name": "StdCloudMask",
-        "description": "This algorithm removes pixels with cloud, cloud shadow or high aerosol, based on the product's pixel quality layer. It works better for Modis and Landsat.",
-        "ref": "",
-        "nSimImgs": 500, # confirm it!
-        "applicableTo": [101,102,105,106,107,111,112,115,116,117,151,152,201,202,301,302,303,311,312,313,314,315]
-    },
-    2: {
-        "name": "MOD3R",
-        "description": "This algorithm replicates, to the possible extent, the MOD3R algorithm, developed by researchers from the IRD French institute.",
-        "ref": "Espinoza-Villar, R. 2013. Suivi de la dynamique spatiale et temporelle des flux se´dimentaires dans le bassin de l’Amazone a` partir d’images satellite. PhD thesis, Université Toulouse III - Paul Sabatier, Toulouse, France.",
-        "nSimImgs": 40,
-        "applicableTo": [101,102,105,106,107,111,112,115,116,117,151,152]
-    },
-    3: {
-        "name": "MOD3R_minNDVI",
-        "description": "It is a modification of the MOD3R algorithm, defining as the water-representative cluster the one with the lowest NDVI.",
-        "ref": "VENTURA, D.L.T. 2020. Unpublished.",
-        "nSimImgs": 60,
-        "applicableTo": [101,102,105,106,107,111,112,115,116,117,151,152]
-    },
-    4: {
-        "name": "MOD3R_minIR",
-        "description": "It is a modification of the MOD3R algorithm, defining as the water-representative cluster the one with the lowest reflectance in the near infrared.",
-        "ref": "VENTURA, D.L.T. 2020. Unpublished.",
-        "nSimImgs": 60,
-        "applicableTo": [101,102,105,106,107,111,112,115,116,117,151,152]
-    },
-    5: {
-        "name": "Ventura2018",
-        "description": "It is simply a threshold (400) in the near infrared.",
-        "ref": "VENTURA, D.L.T. 2018. Water quality and temporal dynamics of the phytoplankton biomass in man-made lakes of the Brazilian semiarid region: an optical approach. Thesis. University of Brasilia.",
-        "nSimImgs": 500, # test it!
-        "applicableTo": [*range(100, 120)] + [151,152]
-    },
-    6: {
-        "name": "S2WP_v6",
-        "description": "Selects, on a Sentinel-2 L2A image, the water pixels not affected by cloud, cirrus, shadow, sunglint and adjacency effects. It selects both 'bright' and 'dark' water pixels. The latter may incorrectly include shaded water pixels.",
-        "ref": "VENTURA, D.L.T. 2020. Unpublished.",
-        "nSimImgs": 150,
-        "applicableTo": [201]
-    },
-    7: {
-        "name": "S2WP_Bright_v6",
-        "description": "Selects, on a Sentinel-2 L2A image, the 'bright' water pixels (which includes most types of water) not affected by cloud, cirrus, shadow, sunglint and adjacency effects. 'Dark' water pixels, which may me mixed with shaded water pixels, are excluded.",
-        "ref": "VENTURA, D.L.T. 2020. Unpublished.",
-        "nSimImgs": 150,
-        "applicableTo": [201]
-    },
-    8: {
-        "name": "S2WP_Dark_v6",
-        "description": "Selects, on a Sentinel-2 L2A image, the 'dark' water pixels (such as waters rich in dissolved organic compounds) not affected by cloud, cirrus, sunglint and adjacency effects. 'Dark' water pixels may me mixed with shaded water pixels.",
-        "ref": "VENTURA, D.L.T. 2020. Unpublished.",
-        "nSimImgs": 150,
-        "applicableTo": [201]
-    },
-    9: {
-        "name": "S2WP_v7",
-        "description": "Selects, on an atmospherically corrected Sentinel-2 or Landsat image, the water pixels not affected by cloud, cirrus and sunglint, as well as pixels not strongly affected by shadow, aerosol and adjacency effects.",
-        "ref": "VENTURA, D.L.T. 2020. Unpublished.",
-        "nSimImgs": 120,
-        "applicableTo": [201,301,302,303,311,312,313,314,315,101,102,105,106,107,111,112,115,116,117,151,152]
-    },
-    10: {
-        "name": "S2WP_v7_MODIS",
-        "description": "Selects, on an atmospherically corrected Modis image, the water pixels not affected by cloud, cirrus and sunglint, as well as pixels not strongly affected by shadow, aerosol and adjacency effects.",
-        "ref": "VENTURA, D.L.T. 2020. Unpublished.",
-        "nSimImgs": 150,
-        "applicableTo": [201,301,302,303,311,312,313,314,315,101,102,105,106,107,111,112,115,116,117,151,152]
-    },
-    11: {
-        "name": "RICO",
-        "description": "For products with only the red and NIR bands, selects water pixels. Not appropriate for eutrophic conditions or for extreme inorganic turbidity.",
-        "ref": "VENTURA, D.L.T. 2021. Unpublished.",
-        "nSimImgs": 30,
-        "applicableTo": [101,102,103,104,105,106,107,111,112,113,114,115,116,117,151,152,201,202,301,302,303,311,312,313,314,315]
-    },
-    12: {
-        "name": "S2WP_v8",
-        "description": "Selects, on an atmospherically corrected image, the water pixels unaffected by cloud, cirrus, sunglint, aerosol, shadow and adjacency effects.",
-        "ref": "VENTURA, D.L.T. 2021. Unpublished.",
-        "nSimImgs": 120,
-        "applicableTo": [201,301,302,303,311,312,313,314,315,101,102,105,106,107,111,112,115,116,117,151,152]
-    },
-    13: {
-        "name": "minNDVI + Wang2016",
-        "description": "Selects the pixel cluster with the lowest NDVI and reduces reflectance noise by subtracting the minimum value in the NIR-SWIR range from all bands, excluding pixels with high NIR or SWIR.",
-        "ref": "WANG, S. et al. 2016. A simple correction method for the MODIS surface reflectance product over typical inland waters in China. Int. J. Remote Sens. 37 (24), 6076–6096.",
-        "nSimImgs": 30,
-        "applicableTo": [101,102,105,106,107,111,112,115,116,117,151,152]
-    },
-    14: {
-        "name": "GPM daily precipitation",
-        "description": "Average the calibrated precipitation in 24 hours inside the area of interest.",
-        "ref": "VENTURA, D.L.T. 2021. Unpublished.",
-        "nSimImgs": 48,
-        "applicableTo": [901]
-    }
-}
-IMG_PROC_ALGO_LIST = [*IMG_PROC_ALGO_SPECS]
-
-
-ESTIMATION_ALGO_SPECS = {
-    0: {
-        "name": "None",
-        "description": "This algorithm makes no calculations and no changes to the images.",
-        "model": "",
-        "ref": "",
-        "paramName": [""],
-        "requiredBands": []
-    },
-    1: {
-        "name": "Former HidroSat chla",
-        "description": "Estima a concentração de clorofila (ug/L) em açudes do Semiárido.",
-        "model": "4.3957 + 0.213*(R - R^2/G) + 0.0004*(R - R^2/G)^2",
-        "ref": "",
-        "paramName": ["chla_surf"],
-        "requiredBands": ["red", "green"]
-    },
-    2: {
-        "name": "SSS Solimões",
-        "description": "Estimates the surface suspended solids concentration in the Solimões River.",
-        "model": "759.12*(NIR/red)^1.9189",
-        "ref": "Villar, R.E.; Martinez, J.M; Armijos, E.; Espinoza, J.C.; Filizola, N.; Dos Santos, A.; Willems, B.; Fraizy, P.; Santini, W.; Vauchel, P. Spatio-temporal monitoring of suspended sediments in the Solimoes River (2000-2014). Comptes Rendus Geoscience, v. 350, n. 1-2, p. 4-12, 2018.",
-        "paramName": ["SS_surf"],
-        "requiredBands": ["red", "NIR"]
-    },
-    3: {
-        "name": "SSS Madeira",
-        "description": "Estimates the surface suspended solids concentration in the Madeira River.",
-        "model": "1020*(NIR/red)^2.94",
-        "ref": "Villar, R.E.; Martinez, J.M.; Le Texier, M.; Guyot, J.L.; Fraizy, P.; Meneses, P.R.; Oliveira, E. A study of sediment transport in the Madeira River, Brazil, using MODIS remote-sensing images. Journal of South American Earth Sciences, v. 44, p. 45-54, 2013.",
-        "paramName": ["SS_surf"],
-        "requiredBands": ["red", "NIR"]
-    },
-    4: {
-        "name": "SSS Óbidos",
-        "description": "Estimates the surface suspended solids concentration in the Amazon River, near Óbidos.",
-        "model": "0.2019*NIR - 14.222",
-        "ref": "Martinez, J. M.; Guyot, J.L.; Filizola, N.; Sondag, F. Increase in suspended sediment discharge of the Amazon River assessed by monitoring network and satellite data. Catena, v. 79, n. 3, p. 257-264, 2009.",
-        "paramName": ["SS_surf"],
-        "requiredBands": ["NIR"]
-    },
-    5: {
-        "name": "Turb Paranapanema",
-        "description": "Estimates the surface turbidity in reservoirs along the Paranapnema river.",
-        "model": "2.45*EXP(0.00223*red)",
-        "ref": "Condé, R.C.; Martinez, J.M.; Pessotto, M.A.; Villar, R.; Cochonneau, G.; Henry, R.; Lopes, W.; Nogueira, M. Indirect Assessment of Sedimentation in Hydropower Dams Using MODIS Remote Sensing Images. Remote Sensing, v.11, n. 3, 2019.",
-        "paramName": ["Turb_surf"],
-        "requiredBands": ["red"]
-    },
-    10: {
-        "name": "Brumadinho_2020simp",
-        "description": "Estimates the surface suspended solids concentration in the Paraopeba River, accounting for the presence of mining waste after the 2019 disaster.",
-        "model": "more than one",
-        "ref": "VENTURA, 2020 (Unpublished).",
-        "paramName": ["SS_surf"],
-        "requiredBands": ["red", "green", "NIR"]
-    },
-    11: {
-        "name": "Açudes SSS-ISS-OSS-Chla",
-        "description": "Estimates four parameters for the waters of Brazilian semiarid reservoirs: surface suspended solids, its organic and inorganic fractions, and chlorophyll-a.",
-        "model": "more than one",
-        "ref": "VENTURA, 2020 (Unpublished).",
-        "paramName": ["SS_surf","ISS_surf","OSS_surf","chla_surf","biomass_surf"],
-        "requiredBands": ["blue", "green", "red", "NIR"]
-    },
-    12: {
-        "name": "Açudes Chla 2022",
-        "description": "Estimates chlorophyll-a in Brazilian semiarid reservoirs.",
-        "model": "-4.227 + 0.1396*G + -0.1006*R",
-        "ref": "VENTURA, 2022 (Unpublished).",
-        "paramName": ["chla_surf"],
-        "requiredBands": ["green", "red"]
-    },
-    99: {
-        "name": "Test",
-        "description": "This algorithm is for test only. It adds a band 'turb_surf' with a constant value of 1234.",
-        "ref": "",
-        "model": "",
-        "paramName": ["turb_surf"],
-        "requiredBands": ["red", "NIR"]
-    }
-}
-ESTIMATION_ALGO_LIST = [*ESTIMATION_ALGO_SPECS]
-
-
-REDUCTION_SPECS = {
-    0: {
-        "description": "none",
-        "sufix": [""]
-    },
-    1: {
-        "description": "median",
-        "sufix": ["median"]
-    },
-    2: {
-        "description": "mean",
-        "sufix": ["mean"]
-    },
-    3: {
-        "description": "mean & stdDev",
-        "sufix": ["mean", "stdDev"]
-    },
-    4: {
-        "description": "min & max",
-        "sufix": ["min", "max"]
-    },
-    5: {
-        "description": "count",
-        "sufix": ["count"]
-    },
-    6: {
-        "description": "sum",
-        "sufix": ["sum"]
-    },
-    7: {
-        "description": "median, mean, stdDev, min & max",
-        "sufix": ["median", "mean", "stdDev", "min", "max"]
-    }
-}
-REDUCER_LIST = [(str(k) + " (" + REDUCTION_SPECS[k]["description"] + ")") for k in range(len(REDUCTION_SPECS))]    
-
-
 # Get the GEEDaR product list.
 def listAvailableProducts() -> list:
-    """Essa função retorna uma lista com todos os produtos de satelites
-    disponíveis.
+    """
+    Retorna uma lista com todos os produtos de satelites disponíveis.
+
+    Returns:
+        Uma lista com os produtos de satélites disponíveis
+
+    Examples:
+        >>> listAvailableProducts()
+        [101,  102, 103, 104, 105, 106, 107, 111, 112, 113, 114, 115, 116, 117, 151, 152, 201, 202, 301, 302, 303, 311, 312, 313, 314, 315, 901]
     """
     return AVAILABLE_PRODUCTS
 
 
 # Get the list of image processing algorithms.
 def listProcessingAlgos() -> list:
-    """Essa função retorna uma lista com todos os algoritmos de 
-    processamento disponíveis.
+    """
+    Retorna uma lista com os algoritmos de processamento disponíveis.
+
+    Returns:
+        Uma lista com os algoritmos de processamento disponíveis.
+    Examples:
+        >>>listProcessingAlgos()
+        []
     """
     return IMG_PROC_ALGO_LIST
 
 
 # Get the list of estimation (inversion) algorithms.
 def listEstimationAlgos() -> list:
-    """Essa função retorna a lista de algorítmos de estimação 
-    (inversão).
+    """
+    Retorna a lista de algorítmos de estimação (inversão).
+
+    Returns:
+        Uma lista com os algoritmos de processamento disponíveis.
+    Examples:
+        >>>listProcessingAlgos()
+        []
     """
     return ESTIMATION_ALGO_LIST
 
 
 # Get the list of GEE image collection IDs related to a given GEEDaR product.
-def getCollection(productID) -> list:
-    """Essa função retorna uma lista com uma coleção de imagens GEE 
-    relacionadas a determinado produto GEEDaR.
+def getCollection(productID:int) -> ee.imagecollection.ImageCollection:
+    """
+    Returna uma lista com uma coleção de imagens GEE de determinado produto GEEDaR.
+
+    Args:
+        productID: Identificação do produto espectral
+    
+    Returns:
+        Uma lista com uma coleção de imagens do GEE relacionadas a determinado produto GEEDaR
+    Examples:
+        >>>getCollection(101)
+        ee.imagecollection.ImageCollection
     """
     return PRODUCT_SPECS[productID]["collection"].set("product_id", productID)
 
@@ -723,135 +81,28 @@ def getCollection(productID) -> list:
 # Given a product ID, get a dictionary with the band names corresponding to spectral regions (blue, green, red, ...).
 def getSpectralBands(productID:int) -> dict:
     """
-    Essa função retorna um dicionario com os nomes das bandas 
-    correspondentes a região espectral a partir de determinada ID de um
-    produto.
+    Retorna um dicionario com os nomes das bandas de uma determinada região espectrais
+    
+    Args:
+        productID: Identificação do produto espectral
+    
+    Returns:
+        Um dicionário com o nome das bandas espectrais de um produto GEEDaR
+
+    Examples:
+        >>>getSpectralBands(101)
+        {'blue': 'sur_refl_b03', 'green': 'sur_refl_b04', 'red': 'sur_refl_b01',
+        'NIR': 'sur_refl_b02', 'SWIR': 'sur_refl_b06', 'wl490': 'sur_refl_b03',
+        'wl800': 'sur_refl_b02', 'wl1200': 'sur_refl_b05', 'wl1500': 'sur_refl_b06',
+        'wl2000': 'sur_refl_b07', 'sur_refl_b01': 'sur_refl_b01', 'sur_refl_b02': 'sur_refl_b02',
+        'sur_refl_b03': 'sur_refl_b03', 'sur_refl_b04': 'sur_refl_b04', 'sur_refl_b05': 'sur_refl_b05',
+        'sur_refl_b06': 'sur_refl_b06', 'sur_refl_b07': 'sur_refl_b07'}
+
     """
     commonBandsDict = {k: PRODUCT_SPECS[productID]["bandList"][v] for k, v in PRODUCT_SPECS[productID]["commonBands"].items() if v >= 0}
     spectralBandsList = [PRODUCT_SPECS[productID]["bandList"][v] for v in PRODUCT_SPECS[productID]["spectralBandInds"]]
     spectralBandsDict = {k: k for k in spectralBandsList}
     return {**commonBandsDict, **spectralBandsDict}
-
-
-# Unfold the processing code into the IDs of the product and of the pixel selection and inversion algorithms.
-def unfoldProcessingCode(fullCode:int, silent:bool = False):
-    """
-    Desempacota o código de processamento no ID dos produtos na 
-    seleção de pixels e no algorítmo de inversão.
-    """
-    failValues = (None, None, None, None, None)
-    fullCode = str(fullCode)
-    
-    if len(fullCode) < 8:
-        if not silent:
-            raise Exception("Unrecognized processing code: '" 
-                + fullCode 
-                + "'. It must be a list of integers in the form PPPSSRRA '"
-                + "'(PPP is one of the product IDs listed by '-h:products';'"
-                + "' SS is the code of the pixel selection algorithm; '"
-                + "' RR, the code of the processing algorithm; '"
-                + "' and A, the code of the reducer.)."
-                )
-        else:
-            return failValues
-    
-    if fullCode[0] == "[" and fullCode[-1] == "]":
-        fullCode = fullCode[1:-1]
-        
-    strCodes = fullCode.replace(" ", "").split(",")
-    
-    processingCodes = []
-    productIDs = []
-    imgProcAlgos = []
-    estimationAlgos = []
-    reducers = []
-    
-    for strCode in strCodes:
-        try:
-            code = int(strCode)
-        except:
-            if not silent:
-                print("(!)")
-                raise Exception("Unrecognized processing code: '" 
-                    + strCode 
-                    + "'. It should be an integer in the form PPPSSRRA '"
-                    + "'(PPP is one of the product IDs listed by '-h:products';'"
-                    + "' SS is the code of the pixel selection algorithm; RR, '"
-                    + "' the code of the processing algorithm; and A, the code of the reducer.)."
-                    )
-            else:
-                return failValues
-        if code < 10000000:
-            if not silent:
-                print("(!)")
-                raise Exception("Unrecognized processing code: '" 
-                    + strCode 
-                    + "'."
-                    )
-            else:
-                return failValues
-        
-        processingCodes.append(code)
-        
-        productID = int(strCode[0:3])
-        if not productID in AVAILABLE_PRODUCTS:
-            if not silent:
-                print("(!)")
-                raise Exception("The product ID '" 
-                    + str(productID) 
-                    + "' derived from the processing code '" 
-                    + strCode 
-                    + "' was not recognized."
-                    )
-            else:
-                return failValues
-        productIDs.append(productID)
-        
-        imgProcAlgo = int(strCode[3:5])
-        if not imgProcAlgo in IMG_PROC_ALGO_LIST:
-            if not silent:
-                print("(!)")
-                raise Exception("The image processing algorithm ID '" 
-                    + str(imgProcAlgo) 
-                    + "' derived from the processing code '" 
-                    + strCode 
-                    + "' was not recognized."
-                    )
-            else:
-                return failValues
-        imgProcAlgos.append(imgProcAlgo)
-        
-        estimationAlgo = int(strCode[5:7])
-        if not estimationAlgo in ESTIMATION_ALGO_LIST:
-            if not silent:
-                print("(!)")
-                raise Exception("The estimation algorithm ID '" 
-                    + str(estimationAlgo) 
-                    + "' derived from the processing code '" 
-                    + strCode 
-                    + "' was not recognized."
-                    )
-            else:
-                return failValues
-        estimationAlgos.append(estimationAlgo)       
-        reducer = int(strCode[-1])
-
-        if not reducer in range(len(REDUCER_LIST)):
-            if not silent:
-                print("(!)")
-                raise Exception("The reducer code '" 
-                    + str(reducer) 
-                    + "' in the processing code '" 
-                    + strCode 
-                    + "' was not recognized. The reducer code must correspond to an index of the reducer list: " 
-                    + str(REDUCER_LIST) + "."
-                    )
-            
-            else:
-                return failValues
-        reducers.append(reducer)
-    
-    return processingCodes, productIDs, imgProcAlgos, estimationAlgos, reducers
 
 
 # Mask bad pixels based on the respective "pixel quality assurance" layer.
@@ -2014,7 +1265,8 @@ def imageProcessing(algo, productID, dateList, clip = True):
     
     #---
         
-    # If not already added, add the final number of pixels selected by the algorithm as an image propoerty.
+    # If not already added, add the final number of pixels selected 
+    # by the algorithm as an image propoerty.
     if not "n_selected_pixels" in export_vars:
         export_vars.append("n_selected_pixels")
         image_collection = image_collection.map(
@@ -2032,6 +1284,9 @@ def imageProcessing(algo, productID, dateList, clip = True):
 # funciona, dessa forma eu acredito passar o running modes como argumento de
 # uma função seja o mais interessante para o objetivo. Se der errado podemos
 # retornar o modelo de execução antigo, mas preciso tentar antes.
+
+# Apply a estimation (inversion) algorithm to the image collection to estimate 
+# a parameter (e.g. water turbidity).
 def estimation(algos:int, productID:int, demandIDs = [-1], running_mode:int = 1):
     """ Essa função executa um conjunto de algoritmos de estimação."""
     global image_collection
@@ -2205,3 +1460,668 @@ def estimation(algos:int, productID:int, demandIDs = [-1], running_mode:int = 1)
                 lambda image: image.addBands(
                 ee.Image(1234).rename(varName[0]))
                 )
+
+# Function for reducing the values of each image (previously masked) in a 
+# collection applying the predefined reducer (mean, median, ...)
+def reduction(reducer, productID, aoi=None):
+    """
+    Essa função reduz o valor de cada imagem previamente mascadara em
+    uma coletação aplicando o redutor predefinido
+    """
+    global image_collection
+    global ee_reducer
+    
+    # Parameters to include in the result data frame:
+    paramList = ee.List(export_vars)   
+
+    def getParamVals(image, result):
+        return ee.Dictionary(result).set(
+            ee.Image(image).get("img_date"), ee.Dictionary.fromLists(
+                paramList, paramList.map(
+                    lambda paramName: ee.Image(image).get(ee.String(paramName))
+                    )
+                )
+            )   
+    first = ee.Dictionary()
+    paramDict = ee.Dictionary(
+        ee.ImageCollection(image_collection).iterate(getParamVals, first))
+  
+    if reducer == 0:
+        return paramDict
+
+    else:
+        if reducer == 1:
+            ee_reducer = ee.Reducer.median()
+
+        elif reducer == 2:
+            ee_reducer = ee.Reducer.mean()
+
+        elif reducer == 3:
+            ee_reducer = ee.Reducer.mean().combine(
+                reducer2=ee.Reducer.stdDev(),sharedInputs=True
+                )
+
+        elif reducer == 4:
+            ee_reducer = ee.Reducer.minMax()
+
+        elif reducer == 5:
+            ee_reducer = ee.Reducer.count()
+
+        elif reducer == 6:
+            ee_reducer = ee.Reducer.sum()
+
+        elif reducer == 7:
+            ee_reducer = ee.Reducer.median() \
+                .combine(reducer2 = ee.Reducer.mean(), sharedInputs = True) \
+                .combine(reducer2 = ee.Reducer.stdDev(), sharedInputs = True) \
+                .combine(reducer2 = ee.Reducer.minMax(), sharedInputs = True)
+       
+    band = PRODUCT_SPECS[productID]["scaleRefBand"]
+       
+    # Combine the dictionaries of parameters and of band values.
+    def combDicts(key, subDict):
+        return ee.Dictionary(
+            subDict).combine(ee.Dictionary(paramDict).get(key)
+                             )
+    
+    successful = False
+    timeoutcounts = 0
+    tileScale = 1
+
+    for c in range(3):
+        
+        def reduce(image, result):
+            scale = image.select(band).projection().nominalScale()
+            return ee.Dictionary(result).set(
+                ee.Image(image).get("img_date"), ee.Image(image).reduceRegion(
+                    reducer=ee.Reducer(ee_reducer), geometry = aoi, 
+                    scale=scale, bestEffort = True, 
+                    tileScale=tileScale
+                    )
+                )
+        #first = ee.Dictionary()
+        bandDict = ee.Dictionary(
+            ee.ImageCollection(image_collection).iterate(reduce, first)
+            )
+        
+        try:
+            result = bandDict.map(combDicts).getInfo()
+            successful = True
+            #if c > 0:
+            #print("Successful retrieval.")
+            break
+        
+        except Exception as e:
+            print("(!)")
+            print(e)
+            if str(e) == "Computation timed out.":
+                if c < 2:
+                    print("Trying again...")                    
+                timeoutcounts = timeoutcounts + 1
+                if(timeoutcounts >= 2):
+                    # On the second failure for computation timeout, process images one by one:
+                    localDateList = image_collection.aggregate_array("img_date").getInfo()
+                    if len(localDateList) > 1:
+                        print("This time processing images one by one:")                    
+                        result = ee.Dictionary()
+                        for localDate in localDateList:
+                            localImageCollection = image_collection.filterDate(
+                                localDate, (pd.Timestamp(localDate) 
+                                            + pd.Timedelta(1, "day")
+                                            ).strftime("%Y-%m-%d")
+                                            )
+                            #first = ee.Dictionary()
+                            paramDict = ee.Dictionary(
+                                ee.ImageCollection(localImageCollection).iterate(getParamVals, first)
+                                )
+                            bandDict = ee.Dictionary(
+                                ee.ImageCollection(localImageCollection).iterate(reduce, first)
+                                )
+                            localResult = bandDict.map(combDicts)
+                            print(localDate + ": ", end = '')
+                            try:
+                                result = ee.Dictionary(result).combine(localResult).getInfo()
+                                print("successful retrieval.")
+                                successful = True
+                            except:
+                                print("Failed.")
+                        break
+            elif str(e)[:40] == "Output of image computation is too large":
+                if c < 2:
+                    print("Trying with a different tileScale parameter: " 
+                          + str(tileScale) + "...")
+                    tileScale = tileScale * 2
+                else:
+                    print("Failed.")
+            else:
+                if c < 2:
+                    print("Trying again in 30 seconds...")
+                    sleep(30)
+                else:
+                    print("Failed.")
+                    
+    if not successful:
+        return
+        
+    reducedBands = list({*bands.values()}) + export_bands
+    sufix = REDUCTION_SPECS[reducer]["sufix"][0]
+
+    if len(REDUCTION_SPECS[reducer]["sufix"]) == 1:
+        for k1 in result:
+            for k2 in [*result[k1]]:
+                if k2 in reducedBands:
+                    result[k1][k2 + "_" + sufix] = result[k1].pop(k2)
+    #print("Successful retrieval.")
+    return result
+
+# Convert a 'date-ranges' to a 'specific-dates' data frame.
+def toSpecificDatesDF(input_df):
+    """
+    Essa função converte uma série temporal em datas específicas em um data frame
+    """
+    product_ids = [101,102,301,302,303,201]
+    colnames = [c.lower() for c in [*input_df.columns]]
+
+    for i in colnames:
+        print(i, type(i))
+
+    
+    if (all(col in colnames for col in ["lat", "long", 
+                                        "start_date", "end_date"]
+        ) or all(col in colnames for col in ["id", "start_date", 
+                                             "end_date"])
+        ):
+        print("(!)")
+        raise Exception(
+            "The input CSV file should have the columns 'start_date', 'end_date' and 'id' or 'lat' and 'long'."
+            )
+    
+    startDate_col = colnames.index("start_date")
+    endDate_col = colnames.index("end_date")
+
+    exportColumns = []
+
+    # ID:
+    try:
+        id_col = colnames.index("id")
+    except:
+        pass
+    else:
+        exportColumns.append(id_col)
+
+    # Lat/Long:
+    try:
+        lat_col = colnames.index("lat")
+        long_col = colnames.index("long")
+    except:
+        pass
+    else:
+        exportColumns.extend([lat_col, long_col])
+
+    nrows = input_df.shape[0]
+    tmpList = []
+
+    for row_i in range(nrows):
+        nDates = 0
+        try:
+            # Get the optimal start date, discarding the dates of the period 
+            # before the beginning of the sensor operation.
+            userStartDateStr = input_df.iloc[row_i, startDate_col]
+
+            if (not isinstance(userStartDateStr, str)
+                ) or (userStartDateStr.lower() == "auto"
+                      ) or (userStartDateStr.replace(" ", "") == ""):
+                userStartDateStr = "1960-01-01"
+
+            userStartDate = pd.to_datetime(userStartDateStr).date()
+            earliestSensorDate = pd.to_datetime('today').date()
+            for prodID in product_ids:
+                collectionStartDate = pd.to_datetime(
+                        PRODUCT_SPECS[prodID]["startDate"]
+                    ).date()
+                earliestSensorDate = min(earliestSensorDate, collectionStartDate)
+            optimalStartDate = max(userStartDate, earliestSensorDate)
+            dates = [*pd.Series(pd.date_range(
+                optimalStartDate, pd.to_datetime(input_df.iloc[row_i, endDate_col])
+                )).astype("str")]            
+            nDates = len(dates)
+        except:
+            pass
+
+        if not nDates > 0:
+            print("(!) Could not interpret the date range defined by 'start_date' and 'end_date' in row #" 
+                  + str(row_i + 1) + " of the input CSV file. The row was ignored.")
+            continue
+        
+        tmpDF = pd.DataFrame({"date": dates})
+        for c in exportColumns:
+            tmpDF[input_df.columns[c]] = input_df.iloc[row_i, c]
+        tmpList.append(tmpDF)
+    
+    input_df = pd.concat(tmpList)
+
+
+# Retrieve data in the 'speficic-dates' mode.
+## Ideally, the CSV file must include the columns 'date', 'id', 'lat' and long in such order.
+def specificDatesRetrieval(
+        date_col:int = 0, 
+        id_col:int = 1, 
+        lat_col:int = 2, 
+        long_col:int = 3,  
+        running_mode:int = 1,
+        input_dir:str = "", 
+        aoi_mode:str = 'kml',
+        append_mode:bool = False,
+        max_n_proc_pixels:int = 25000,
+        estimation_algos:list = [0]*6,
+        reducers:list = [1]*6,
+        img_proc_algos:list = [10,10,
+                               9,9,9,9], 
+        aoi_radius:int = 1000, 
+        product_ids:list = [101,102,301,
+                            302,303,201], 
+        processing_codes:list = [10110001,10210001,30109001,
+                                                  30209001,30309001,20109001]
+        ):
+    """
+    Recupera dados no modo específico de datas
+    """
+
+    #global image_collection
+    
+    global aoi, export_bands, export_vars
+    global input_df
+    global time_window
+
+    nProcCodes = len(processing_codes)
+    export_bands = []
+    export_vars = []
+
+    if running_mode == 2:
+        time_window = 0
+        print("Converting the date-range format to the specific-dates format...")
+        toSpecificDatesDF()
+    
+    print("Checking data in the input file...")
+    
+    # Data frame attributes:
+    colnames = [c.lower() for c in [*input_df.columns]]
+    nrows = input_df.shape[0]
+    ncols = input_df.shape[1]
+
+    # Check if the data frame has enough rows and columns:
+    if nrows < 1:
+        print("(!)")
+        raise Exception(
+            "The input CSV file must have a header row and at least one data row.")
+    
+    if ncols < 3 and aoi_mode != "kml":
+        print("(!)")
+        raise Exception(
+            "The input CSV file must have a header and at least three columns "
+            + "(date, lat, long), unless you are defining your sites trough KML "
+            + "files (option -k), in which case the minimum required columns are"
+            + " 'date' and 'id'.")
+    
+    if ncols < 2 and aoi_mode == "kml":
+        print("(!)")
+        raise Exception(
+            "If you choose to define the regions of interest trough KML files,"
+            + "the input CSV file must include, at least, the columns 'date'"
+            +" and 'id'. The KML files' names must be equal to the corresponding"
+            +" 'id' plus the extension '.kml' and the files must be in the same "
+            + "folder as the CSV file.")
+    
+    # Update, if possible, the index of the "date" column.
+    try:
+        date_col = colnames.index("date")
+    except ValueError:
+        pass
+    
+    # Check the date values:
+    try:
+        pdDates = pd.to_datetime(input_df.iloc[:,date_col])
+        input_df.iloc[:, date_col] = pd.Series(pdDates).dt.date
+    except:
+        print("(!)")
+        raise Exception(
+            "The date column in the input file must have valid date values "
+            + "in the format yyyy-mm-dd.")
+        
+    # Update, if possible, the index of the (site) "id" column.
+    try:
+        id_col = colnames.index("id")
+    except ValueError:
+        if ncols < 4 and aoi_mode != "kml":
+            id_col = -1
+            lat_col = lat_col - 1
+            long_col = long_col - 1
+    else:
+        if ncols < 4 and aoi_mode != "kml":
+            print("(!)")
+            raise Exception(
+                "The input CSV file must include, at least, the columns "
+                + " 'date', 'lat' and 'long', unless you define your sites "
+                + "of interest through kml files (option -k), in which case the"
+                + "'date' and 'id' columns are enough.") 
+    
+    # Update, if possible, the index of the lat column.
+    try:
+        lat_col = colnames.index("lat")
+    except ValueError:
+        if aoi_mode == "kml":
+            lat_col = -1
+        
+    # Update, if possible, the index of the long column.
+    try:
+        long_col = colnames.index("long")
+    except ValueError:
+        if aoi_mode == "kml":
+            long_col = -1
+
+    # Unknown id column?
+    if id_col == date_col or id_col == lat_col or id_col == long_col:
+        if aoi_mode == "kml":
+            print("(!)")
+            raise Exception(
+                "The column containing the sites' name could not be identified." 
+                + " Please, name it as 'id'.")
+        else:
+            id_col = -1
+
+    # Check the lat/long values:
+    if aoi_mode != "kml":
+        if (not pd.api.types.is_numeric_dtype(input_df.iloc[:, lat_col])
+            ) or ((not pd.api.types.is_numeric_dtype(input_df.iloc[:, long_col]))):
+            print("(!)")
+            raise Exception(
+                "'lat' and 'long' values in the input file must be in decimal degrees.")
+    
+    # Get the indices of the valid rows (no NaN nor None):
+    if aoi_mode == "kml":
+        validIDs = input_df.iloc[:,id_col].notna()
+        validLats = True
+        validLongs = True
+
+    else:
+        validIDs = True
+        validLats = input_df.iloc[:,lat_col].notna()
+        validLongs = input_df.iloc[:,long_col].notna()
+
+    validRows = which(input_df.iloc[:,date_col].notna() 
+                      & validLats & validLongs & validIDs)
+    
+    if len(validRows) < 1:
+        print("(!)")
+        raise Exception(
+            "The input CSV file has no valid rows (rows with no missing data).")
+
+    # Results' data frame template:
+    resultDF_template = input_df.copy()
+    # Add the adjacents dates according to the time window.
+    nrows_result = nrows
+
+    if time_window != 0:
+        print("Expanding the input data to meet the time_window parameter (" 
+              + str(time_window) + ")...")
+        window_size = 1 + (time_window * 2)
+        nrows_tmp = len(validRows) * window_size + (nrows - len(validRows))
+        tmpDF = pd.DataFrame(index=range(nrows_tmp), columns=resultDF_template.columns)
+        imgDate = pd.Series(index=range(nrows_tmp), name="img_date", dtype="float64")
+        row_j = 0
+        validRows_new = []
+
+        for row_i in range(nrows):
+            if row_i in validRows:
+                date_j = pd.Timestamp(
+                    resultDF_template.iloc[row_i, date_col]
+                    ) - pd.Timedelta(time_window, "day")
+                
+                for window_i in range(window_size):
+                    validRows_new.append(row_j)
+                    tmpDF.iloc[row_j] = resultDF_template.iloc[row_i]
+                    imgDate[row_j] = date_j.date()
+                    date_j = date_j + pd.Timedelta(1, "day")
+                    row_j = row_j + 1
+
+            else:            
+                tmpDF.iloc[row_j] = resultDF_template.iloc[row_i]
+                row_j = row_j + 1
+
+        tmpDF.insert(date_col + 1, "img_date", imgDate)
+        ncols = ncols + 1
+        date_col = date_col + 1
+
+        if date_col <= id_col:
+            id_col = id_col + 1
+
+        if date_col <= lat_col:
+            lat_col = lat_col + 1
+
+        if date_col <= long_col:
+            long_col = long_col + 1   
+
+        resultDF_template = tmpDF.copy()        
+        nrows_result = nrows_tmp
+        validRows = validRows_new
+    
+    # Get the unique site IDs:
+    if id_col >= 0:
+        siteSeries = resultDF_template.iloc[:,id_col].astype(str)
+
+    else:
+        siteSeries = pd.Series(
+            [str([*resultDF_template.iloc[:, lat_col]][i]) 
+            + str([*resultDF_template.iloc[:, long_col]][i]) 
+            for i in range(nrows_result)]
+            )
+    
+    siteList = siteSeries.iloc[validRows].unique().tolist()
+
+    # Result dictionary.
+    resultDFs_dictio = {}
+
+    for code_i in range(nProcCodes):
+        processingCode = processing_codes[code_i]
+        resultDFs_dictio[processingCode] = pd.DataFrame(
+            data=None, index=range(nrows_result))
+                 
+    # Data retrieval grouped by GEEDaR product and by site.
+    print("Processing started at " + str(pd.Timestamp.now()) + ".")
+    dataRetrieved = False
+    
+    for site in siteList:
+        print("")
+        print("[Site] " + str(site))
+        targetRows = [i for i in which(siteSeries == site) if i in validRows]
+        dateList = [*pd.to_datetime(
+            resultDF_template.iloc[targetRows, date_col].sort_values()
+            ).dt.strftime("%Y-%m-%d").unique()]
+        aoi = None
+
+        if aoi_mode == "kml":
+            kmlFile = ""
+            searchPath1 = os.path.join(input_dir, site + ".kml")
+            searchPath2 = os.path.join(input_dir, "KML", site + ".kml")
+
+            if os.path.isfile(searchPath1):
+                kmlFile = searchPath1
+
+            elif os.path.isfile(searchPath2):
+                kmlFile = searchPath2
+                
+            if kmlFile == "":
+                print("(!) File " 
+                      + kmlFile + " was not found. The site was ignored.")
+                
+            else:
+                coords = polygonFromKML(kmlFile)
+                if coords != []:
+                    aoi = ee.Geometry.MultiPolygon(coords)
+                else:
+                    print("(!) A polygon could not be extracted from the file " 
+                          + kmlFile + ". The site was ignored.")
+        
+        else:                
+            # Check if lat/long coordinates are the same for the site.
+            lats = [*resultDF_template.iloc[targetRows, lat_col]]
+            firstLat = lats[0]
+            longs = [*resultDF_template.iloc[targetRows, long_col]]
+            firstLong = longs[0]
+
+            if (not all(i == firstLat for i in lats)
+                ) or (not all(i == firstLong for i in longs)):
+                print("(!) Coordinates were not all the same. The first pair was used.")
+            # Define the region of interest.
+            aoi = ee.Geometry.Point(coords = [firstLong, firstLat]).buffer(aoi_radius)
+        
+        if not aoi is None:
+            # If more than one processing code was provided, run one by one.
+            for code_i in range(nProcCodes):
+                processingCode = processing_codes[code_i]
+                productID = product_ids[code_i]
+                imgProcAlgo = img_proc_algos[code_i]
+                estimationAlgo = estimation_algos[code_i]
+                reducer = reducers[code_i]
+                print("\n(" + str(processingCode) + ")")
+                
+                if not productID in IMG_PROC_ALGO_SPECS[
+                    imgProcAlgo]["applicableTo"]:
+                    print("(!) The image processing algorithm #" 
+                          + str(imgProcAlgo) 
+                          + " is not applicable to the product " 
+                          + str(productID) 
+                          + ". This data demand was ignored.")
+                    continue
+
+                # Get the available dates.
+                tmpDateList = getAvailableDates(productID, dateList)
+                availableDates = [d for d in dateList if d in tmpDateList]                
+                #if not len(availableDates) == 0:
+                #    availableDates = list(set(availableDates.sort()))
+                nAvailableDates = len(availableDates)
+                if nAvailableDates == 0:
+                    print("No available data.")
+                elif append_mode:
+                    # Get common band names (e.g. 'red', 'blue', etc.).
+                    commonBandNames = [k for k,v in PRODUCT_SPECS[productID][
+                        "commonBands"].items() if v >= 0]
+                    commonBandInds = [PRODUCT_SPECS[productID][
+                        "commonBands"][k] for k in commonBandNames]
+                    realBandNames = [PRODUCT_SPECS[productID][
+                        "bandList"][i] for i in commonBandInds]
+                    #commonBandsDictio = {PRODUCT_SPECS[productID]["bandList"][v]:k for k,v in PRODUCT_SPECS[productID]["commonBands"].items() if v >= 0 and k in commonBandNames}
+
+                # Divide the request in groups to avoid exceeding GEE capacity.
+                # First, calculate the number of pixels in the region of interest.
+                # Then determine the number of images which correspond to a total of 100 000 pixels.
+                nPixelsInAoI = aoi.area().divide(math.pow(
+                    PRODUCT_SPECS[productID]["roughScale"], 2)).getInfo()
+                maxNImgs = math.ceil(max_n_proc_pixels/nPixelsInAoI)
+                group_len = min(maxNImgs, IMG_PROC_ALGO_SPECS[imgProcAlgo]["nSimImgs"])
+                nGroups = math.ceil(nAvailableDates / group_len)
+
+                for g in range(nGroups):
+                    dateSublist_inds = range(g * group_len, min(
+                        g * group_len + group_len, nAvailableDates))
+                    dateSublist = [availableDates[i] for i in dateSublist_inds]
+                    print("Requesting data for days " 
+                          + str(g * group_len + 1) 
+                          + "-" + str(min(g * group_len + group_len, nAvailableDates)) 
+                          + "/" + str(nAvailableDates) + "...")
+                    # Image processing, parameter estimation and reduction.
+                    imageProcessing(imgProcAlgo, productID, dateSublist)
+                    estimation(estimationAlgo, productID)
+                    result = reduction(reducer, productID)
+
+                    if result is None:
+                        print("(!) Failed to retrieve data.")
+
+                    elif result == {}:
+                        print("No data retrieved.")
+
+                    else:
+                        dataRetrieved = True
+                        # Save the retrieved data in the result data frame.
+
+                        for date in [*result]:
+                            sameDateRows = [i for i in which(
+                                resultDF_template.iloc[:,date_col
+                                                       ].astype("str") == date) if i in targetRows]
+                            
+                            for band in [*result[date]]:
+                                colNames = []
+                                if append_mode:
+                                    for i in range(len(commonBandNames)):
+                                        if realBandNames[i] + "_" in band:
+                                            colNames.append(band.replace(
+                                                realBandNames[i], commonBandNames[i]))
+                                elif nProcCodes > 1:
+                                    colNames = [str(processingCode) + "_" + band]
+                                if len(colNames) == 0:
+                                    colNames = [band]
+                                for row_i in sameDateRows:
+                                    for colName in colNames:
+                                        resultDFs_dictio[processingCode].loc[row_i, colName] = result[date][band]
+                        print("Data successfully retrieved.")
+
+    print("Processing finished at " + str(pd.Timestamp.now()) + ".")
+
+    if dataRetrieved:
+        print("Consolidating results...")
+        resultDF_template.reset_index(inplace = True, drop = True)
+
+        if append_mode:
+            # Get all column names.
+            cols = []
+            for k in resultDFs_dictio:
+                cols.extend([*resultDFs_dictio[k].columns])
+            cols = set(cols)
+            commonBandNames = [*PRODUCT_SPECS[101]["commonBands"].keys()]
+            # Reorder columns.
+
+            for k in resultDFs_dictio:
+                tmpDF = pd.DataFrame()
+                for col in cols:
+                    wosuffix = col.split("_")[0]                    
+                    if not wosuffix in commonBandNames:
+                        if col in [*resultDFs_dictio[k].columns]:
+                            tmpDF[col] = resultDFs_dictio[k][col]
+                        else:
+                            tmpDF[col] = math.nan
+                tmpDF = tmpDF.reindex(sorted(tmpDF.columns), axis=1)
+
+                for band in commonBandNames:
+                    matches = [col for col in cols if (band + "_") in col]
+                    for col in matches:
+                        if col in [*resultDFs_dictio[k].columns]:
+                            tmpDF[col] = resultDFs_dictio[k][col]
+                        else:
+                            tmpDF[col] = math.nan
+                dataColNames = tmpDF.columns
+                resultDFs_dictio[k] = tmpDF
+                prodID = int(str(k)[0:3])
+                sensor = PRODUCT_SPECS[prodID]["sensor"]
+                resultDFs_dictio[k] = pd.concat([
+                    pd.DataFrame({"ProcCode": [k] * nrows_result, 
+                                  "Source": [sensor] * nrows_result}), 
+                                  resultDFs_dictio[k]], axis = 1, sort = False)
+                resultDFs_dictio[k] = pd.concat([
+                    resultDF_template, resultDFs_dictio[k]], 
+                    axis = 1, sort = False)
+                
+                if(running_mode == 2):
+                    resultDFs_dictio[k].dropna(
+                        subset = dataColNames, how = "all", inplace = True)
+            resultDF = pd.concat([*resultDFs_dictio.values()], sort = False)
+        else:
+            dataDF = pd.concat([*resultDFs_dictio.values()], axis = 1, sort = False)
+            resultDF = pd.concat([resultDF_template, dataDF], axis = 1, sort = False)
+            # Remove empty rows (if in running mode 2):
+            if(running_mode == 2):
+                resultDF.dropna(subset = dataDF.columns, how = "all", inplace = True)
+    else:
+        resultDF = None
+    
+    return resultDF
+

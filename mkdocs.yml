@@ -10,6 +10,9 @@ theme:
 markdown_extensions: 
   - attr_list
 
+watch:
+  - geedar_lib
+
 plugins:
 - mkdocstrings:
     handlers:
