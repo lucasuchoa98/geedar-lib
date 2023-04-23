@@ -32,3 +32,46 @@ def writeToLogFile(lines, entryType, identifier):
         for line in lines:
             print(line)
         print("(.)")
+
+def polygonFromKML(kmlFile):
+    """
+    Essa função extrai um polygono (gee object) a partir de um kml
+    """
+    try:
+        # Read the file as a string.
+        with open(kmlFile, 'rt', encoding="utf-8") as file:
+            doc = file.read()   
+        # Create the KML object to store the parsed result.
+        k = kml.KML()
+        # Read the KML string.
+        k.from_string(doc)
+        structDict = {0: list(k.features())}
+    except:
+        return []
+    
+    # Search for polygons.
+    polygons = []
+    idList = [0]
+    curID = 0
+    lastID = 0
+    try:
+        while curID <= lastID:
+            curFeatures = structDict[curID]
+            for curFeature in curFeatures:
+                if "_features" in [*vars(curFeature)]:
+                    lastID = idList[-1] + 1
+                    idList.append(lastID)
+                    structDict[lastID] = list(curFeature.features())
+                elif "_geometry" in [*vars(curFeature)]:
+                    geom = curFeature.geometry
+                    if geom.geom_type == "Polygon":
+                        coords = [list(point[0:2]) for point in geom.exterior.coords]
+                        if coords == []:
+                            coords = [list(point[0:2]) for point in geom.interiors.coords]
+                        if coords != []:
+                            polygons.append([coords])
+            curID = curID + 1
+    except:
+        pass
+    
+    return polygons
