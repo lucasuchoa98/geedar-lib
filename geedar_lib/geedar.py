@@ -991,7 +991,8 @@ def imageProcessing(algo, productID, dateList, clip = True):
 
     # Filter and prepare the image collection.
     dateMin = dateList[0]
-    dateMax = (pd.Timestamp(dateList[-1]) + pd.Timedelta(1, "day")).strftime("%Y-%m-%d")
+    dateMax = (pd.Timestamp(dateList[-1]) 
+               + pd.Timedelta(1, "day")).strftime("%Y-%m-%d")
     image_collection = ee.ImageCollection(
         getCollection(productID)
         ).filterBounds(aoi).filterDate(dateMin, dateMax)
@@ -1047,7 +1048,9 @@ def imageProcessing(algo, productID, dateList, clip = True):
             ee.Algorithms.If(freq.gt(1), mosaic, firstImg)
             )        
         return ee.List(imgList).splice(0, freq).add(singleImg)
-    mosaicImgList = ee.List(dateFreq.iterate(oneImgPerDate, imageCollection_list))
+    mosaicImgList = ee.List(dateFreq.iterate(
+        oneImgPerDate, imageCollection_list)
+        )
     mosaicCollection = ee.ImageCollection(
         mosaicImgList).copyProperties(image_collection)
     image_collection = ee.ImageCollection(
@@ -1057,7 +1060,9 @@ def imageProcessing(algo, productID, dateList, clip = True):
     
     # Clip the images.
     if clip:
-        image_collection = image_collection.map(lambda image: ee.Image(image).clip(aoi))
+        image_collection = image_collection.map(
+            lambda image: ee.Image(image).clip(aoi)
+            )
 
     # Rescale the spectral bands.
     def rescaleSpectralBands(image):
@@ -1075,7 +1080,10 @@ def imageProcessing(algo, productID, dateList, clip = True):
     # Set the number of unmasked pixels as an image property.
     def nSelecPixels(image):
         scale = image.select(refBand).projection().nominalScale()
-        nSelecPixels = image.select(refBand).reduceRegion(ee.Reducer.count(), aoi).values().getNumber(0)
+        nSelecPixels = image.select(
+            refBand).reduceRegion(
+                ee.Reducer.count(), aoi
+                ).values().getNumber(0)
         return image.set("n_selected_pixels", nSelecPixels)
 
     # minNDVI clustering: select the cluster with the lowest NDVI.
@@ -1096,7 +1104,13 @@ def imageProcessing(algo, productID, dateList, clip = True):
         clusterIDs = ee.List.sequence(0, maxID)
                    
         # Pick the class with the smallest NDVI.
-        ndviList = clusterIDs.map(lambda id: ndviImage.updateMask(resultImage.eq(ee.Image(ee.Number(id)))).reduceRegion(ee.Reducer.mean(), aoi).values().getNumber(0))
+        ndviList = clusterIDs.map(
+            lambda id: ndviImage.updateMask(
+                resultImage.eq(ee.Image(ee.Number(id)))
+                ).reduceRegion(
+                    ee.Reducer.mean(), aoi
+                ).values().getNumber(0)
+                )
         minNDVI = ndviList.sort().getNumber(0)
         waterClusterID = ndviList.indexOf(minNDVI)
 
@@ -1299,7 +1313,8 @@ def imageProcessing(algo, productID, dateList, clip = True):
                     )
                 )
             )
-        # Remove bad pixels (cloud, cloud shadow, high aerosol and acquisition/processing issues)
+        # Remove bad pixels (cloud, cloud shadow, high aerosol and 
+        # acquisition/processing issues)
         image_collection = qaMask_collection(productID, image_collection)
         # Filter out images with too few valid pixels.
         image_collection = image_collection.map(
@@ -1311,7 +1326,16 @@ def imageProcessing(algo, productID, dateList, clip = True):
                     ).values().getNumber(0)
                 )
         )
-        image_collection_out = ee.ImageCollection(image_collection.filterMetadata("n_valid_pixels", "less_than", 10).map(lambda image: ee.Image(image).set("n_selected_pixels", 0, "qual_flag", 0).updateMask(ee.Image(0))))
+        image_collection_out = ee.ImageCollection(
+            image_collection.filterMetadata(
+                "n_valid_pixels", "less_than", 10
+                ).map(
+                    lambda image: ee.Image(image).set(
+                            "n_selected_pixels", 0, 
+                            "qual_flag", 0
+                        ).updateMask(ee.Image(0))
+                    )
+                )
         image_collection_in = ee.ImageCollection(
             image_collection.filterMetadata(
                 "n_valid_pixels", "greater_than", 9
@@ -1375,8 +1399,13 @@ def imageProcessing(algo, productID, dateList, clip = True):
                     )).values(targetBands)
                 landEndmember_red = ee.Number(landEndmember.get(0))
                 landEndmember_nir = ee.Number(landEndmember.get(1))
-                landImage = ee.Image(landEndmember_red).addBands(ee.Image(landEndmember_nir)).rename(targetBands)
-                minError = ee.Dictionary().set("id", ee.Number(waterCandidateIDs.get(0))).set("val", ee.Number(2147483647))
+                landImage = ee.Image(landEndmember_red).addBands(
+                    ee.Image(landEndmember_nir)
+                    ).rename(targetBands)
+                minError = ee.Dictionary().set(
+                        "id", ee.Number(waterCandidateIDs.get(0))
+                        ).set("val", ee.Number(2147483647)
+                    )
                 
                 # Function for getting the best water candidate.
                 def pickWaterCluster(id, errorDict):
@@ -1438,7 +1467,9 @@ def imageProcessing(algo, productID, dateList, clip = True):
                             pickWaterCluster, minError)).get("id")
                         )
                 
-                # Return the image with non-water clusters masked, with the clustering result as a band and with the water cluster ID as a property.
+                # Return the image with non-water clusters masked, 
+                # with the clustering result as a band and with the water 
+                # cluster ID as a property.
                 return image.updateMask(
                     resultImage.eq(
                         ee.Image(waterClusterID))
@@ -1555,10 +1586,13 @@ def imageProcessing(algo, productID, dateList, clip = True):
               .And(ndwihvt2.gte(0.4)) \
               .And(nirMaxVratioDevHighR.lt(0.5)) \
               .And(ndwi.gte(-0.1).Or(maxDiffV.gte(420).And(ci.gte(0.3).Or(maxDiffV.gte(715))))) \
-              .And(ci.lt(0.23).And(aeib2.gte(ci.polynomial([-881.33, 5266.7]))).Or(ci.gte(0.23).And(aeib2.gte(ci.polynomial([519.41, -823.53]))))) 
+              .And(ci.lt(0.23).And(aeib2.gte(
+                ci.polynomial([-881.33, 5266.7])
+                )).Or(ci.gte(0.23).And(aeib2.gte(ci.polynomial([519.41, -823.53]))))) 
               .And( \
                 ci.lt(-0.35).And(ndwihvt2.gte(0.78).Or(aeib1.gte(-5)).Or(blueNIRratio.gte(4))) \
-                .Or(ci.gte(-0.35).And(ci.lt(-0.2)).And(ndwihvt2.gte(0.78).Or(aeib1.gte(-15)).Or(blueNIRratio.gte(5)))) \
+                .Or(ci.gte(-0.35).And(ci.lt(-0.2)).And(
+                    ndwihvt2.gte(0.78).Or(aeib1.gte(-15)).Or(blueNIRratio.gte(5)))) \
                 .Or(ci.gte(-0.2).And(ci.lt(0.3)).And(ndwihvt2.gte(0.78).Or(aeib1.gte(0)))) \
                 .Or(ci.gte(0.3).And(aeib2.gte(220))) \
               ) \
@@ -1874,7 +1908,10 @@ def imageProcessing(algo, productID, dateList, clip = True):
             )
 
         else:
-            export_vars = list(set(export_vars).union({"n_selected_pixels", "n_valid_pixels", "n_total_pixels", "qual_flag"}))        
+            export_vars = list(set(export_vars).union({
+                "n_selected_pixels", "n_valid_pixels", 
+                "n_total_pixels", "qual_flag"}
+                ))        
 
         # Set the number of total pixels and remove unlinkely water pixels.
         image_collection = image_collection.map( \
@@ -2051,7 +2088,9 @@ def estimation(algos:int, productID:int, demandIDs = [-1], running_mode:int = 1)
                 red = image.select(bands["red"])
                 green = image.select(bands["green"])
                 ind = red.subtract(red.pow(2).divide(green))
-                return image.addBands(ind.pow(2).multiply(0.0004).add(ind.multiply(0.213)).add(4.3957).rename(varName[0]))
+                return image.addBands(ind.pow(2).multiply(0.0004).add(
+                        ind.multiply(0.213)).add(4.3957).rename(varName[0]
+                    ))
             image_collection = image_collection.map(estim)
 
         # Sedimentos em Suspensão na Superfície no Solimões.
