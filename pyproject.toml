@@ -5,6 +5,11 @@ description = ""
 authors = ["lucasuchoa98 <lucasuchoalg@gmail.com>"]
 readme = "README.md"
 packages = [{include = "geedar_lib"}]
+classifiers = [
+    "Intended Audience :: Developers"
+    "Natural Language :: Portuguese (Brazilian)"
+    "Development Status :: 2 - Pre-Alpha"
+]
 
 [tool.poetry.dependencies]
 python = "^3.9"
