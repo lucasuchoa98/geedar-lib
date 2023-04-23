@@ -6,10 +6,17 @@ authors = ["lucasuchoa98 <lucasuchoalg@gmail.com>"]
 readme = "README.md"
 packages = [{include = "geedar_lib"}]
 classifiers = [
-    "Intended Audience :: Developers"
-    "Natural Language :: Portuguese (Brazilian)"
-    "Development Status :: 2 - Pre-Alpha"
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Education",
+    "Intended Audience :: Developers",
+    "Natural Language :: Portuguese (Brazilian)",
+    "Development Status :: 2 - Pre-Alpha",
 ]
+
+[tool.poetry.urls]
+"Documentação" = "https://geedar-lib.readthedocs.io/en/latest/"
+"Código" = "https://github.com/lucasuchoa98/geedar-lib"
+"Bug Tracker" = "https://github.com/lucasuchoa98/geedar-lib/issues"
 
 [tool.poetry.dependencies]
 python = "^3.9"
