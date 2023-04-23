@@ -1,10 +1,19 @@
--=|| Google Earth Engine Data Retriever (GEEDaR) ||=-
-This script is intended to retrieve data from Google Earth Engine.
-Based on the provided list of sites and dates and on the chosen processing algorithms, 
-it retrieves the corresponding satellite data.
-Supported products include those from MODIS, VIIRS, Landsat, Sentinel-2 and Sentinel-3.
+# Google Earth Engine Data Retriever (GEEDaR)
 
-Created on Python 3.7
-@author: Dhalton.Ventura
+[![Documentation Status](https://readthedocs.org/projects/geedar-lib/badge/?version=latest)](https://geedar-lib.readthedocs.io/en/latest/?badge=latest) ![CI](https://github.com/lucasuchoa98/geedar-lib/actions/workflows/pipeline.yaml/badge.svg)
+Este script destina-se a recuperar dados do Google Earth Engine.
+Com base na lista fornecida de sites e datas e nos algoritmos de processamento escolhidos,
+ele recupera os dados de satélite correspondentes.
+Os produtos suportados incluem MODIS, VIIRS, Landsat, Sentinel-2 e Sentinel-3.
 
-modified by: lucasuchoa98
+## Instalação
+Para instalação do projeto recomendamos o uso do `pipx`
+
+```bash
+pipx install geedar-lib
+```
+
+Embora isso seja somente uma recomendação! Você também pode instalar o projeto com o gerenciador de sua preferência. Como o pip:
+```bash
+pip install geedar-lib
+```
