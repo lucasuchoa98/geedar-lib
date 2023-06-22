@@ -8,15 +8,27 @@ from shutil import copyfile
 from fastkml import kml
 import ee
 
-from geedar_lib.utils import (which, writeToLogFile, 
+from utils import (which, writeToLogFile, 
                               polygonFromKML, unfoldProcessingCode)
 
-from geedar_lib.utils import (PRODUCT_SPECS, AVAILABLE_PRODUCTS,
+from utils import (PRODUCT_SPECS, AVAILABLE_PRODUCTS,
                               IMG_PROC_ALGO_SPECS, IMG_PROC_ALGO_LIST,
                               ESTIMATION_ALGO_SPECS, ESTIMATION_ALGO_LIST,
                               REDUCTION_SPECS)
 
-ee.Initialize() #realmente necessário?
+ee.Initialize()
+
+# Global objects used among functions.
+image_collection = ee.ImageCollection(ee.Image())
+aoi = None
+ee_reducer = ee.Reducer.median()
+bands = {}
+input_df = pd.DataFrame()
+user_df = pd.DataFrame()
+export_vars = []
+export_bands = []
+log_file = "GEEDaR_log.txt"
+anyError = False
 
 # Get the GEEDaR product list.
 def listAvailableProducts() -> list:
@@ -28,7 +40,7 @@ def listAvailableProducts() -> list:
 
     Examples:
         >>> listAvailableProducts()
-        [101,  102, 103, 104, 105, 106, 107, 111, 112, 113, 114, 115, 116, 117, 151, 152, 201, 202, 301, 302, 303, 311, 312, 313, 314, 315, 901]
+        [101, 102, 103, 104, 105, 106, 107, 111, 112, 113, 114, 115, 116, 117, 151, 152, 201, 202, 301, 302, 303, 311, 312, 313, 314, 315, 901]
     """
     return AVAILABLE_PRODUCTS
 
@@ -40,9 +52,10 @@ def listProcessingAlgos() -> list:
 
     Returns:
         Uma lista com os algoritmos de processamento disponíveis.
+
     Examples:
-        >>>listProcessingAlgos()
-        []
+        >>> listProcessingAlgos()
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     """
     return IMG_PROC_ALGO_LIST
 
@@ -54,9 +67,10 @@ def listEstimationAlgos() -> list:
 
     Returns:
         Uma lista com os algoritmos de processamento disponíveis.
+
     Examples:
-        >>>listProcessingAlgos()
-        []
+        >>> listEstimationAlgos()
+        [0, 1, 2, 3, 4, 5, 10, 11, 12, 99]
     """
     return ESTIMATION_ALGO_LIST
 
@@ -67,13 +81,14 @@ def getCollection(productID:int) -> ee.imagecollection.ImageCollection:
     Returna uma lista com uma coleção de imagens GEE de determinado produto GEEDaR.
 
     Args:
-        productID: Identificação do produto espectral
+        productID: Identificação do produto espectral.
     
     Returns:
-        Uma lista com uma coleção de imagens do GEE relacionadas a determinado produto GEEDaR
+        Uma lista com uma coleção de imagens do GEE relacionadas a determinado produto GEEDaR.
+
     Examples:
-        >>>getCollection(101)
-        ee.imagecollection.ImageCollection
+        >>> getCollection(101)
+        ee.ImageCollection({"functionInvocationValue": {"functionName": "Element.set","arguments": {"key": {"constantValue": "product_id"},"object": {"functionInvocationValue": {"functionName": "ImageCollection.load","arguments": {"id": {"constantValue": "MODIS/006/MOD09GA"}}}},"value": {"constantValue": 101}}}})
     """
     return PRODUCT_SPECS[productID]["collection"].set("product_id", productID)
 
@@ -84,20 +99,14 @@ def getSpectralBands(productID:int) -> dict:
     Retorna um dicionario com os nomes das bandas de uma determinada região espectrais
     
     Args:
-        productID: Identificação do produto espectral
+        productID: Identificação do produto espectral.
     
     Returns:
-        Um dicionário com o nome das bandas espectrais de um produto GEEDaR
+        Um dicionário com o nome das bandas espectrais de um produto GEEDaR.
 
     Examples:
-        >>>getSpectralBands(101)
-        {'blue': 'sur_refl_b03', 'green': 'sur_refl_b04', 'red': 'sur_refl_b01',
-        'NIR': 'sur_refl_b02', 'SWIR': 'sur_refl_b06', 'wl490': 'sur_refl_b03',
-        'wl800': 'sur_refl_b02', 'wl1200': 'sur_refl_b05', 'wl1500': 'sur_refl_b06',
-        'wl2000': 'sur_refl_b07', 'sur_refl_b01': 'sur_refl_b01', 'sur_refl_b02': 'sur_refl_b02',
-        'sur_refl_b03': 'sur_refl_b03', 'sur_refl_b04': 'sur_refl_b04', 'sur_refl_b05': 'sur_refl_b05',
-        'sur_refl_b06': 'sur_refl_b06', 'sur_refl_b07': 'sur_refl_b07'}
-
+        >>> getSpectralBands(101)
+        {'blue': 'sur_refl_b03', 'green': 'sur_refl_b04', 'red': 'sur_refl_b01', 'NIR': 'sur_refl_b02', 'SWIR': 'sur_refl_b06', 'wl490': 'sur_refl_b03', 'wl800': 'sur_refl_b02', 'wl1200': 'sur_refl_b05', 'wl1500': 'sur_refl_b06', 'wl2000': 'sur_refl_b07', 'sur_refl_b01': 'sur_refl_b01', 'sur_refl_b02': 'sur_refl_b02', 'sur_refl_b03': 'sur_refl_b03', 'sur_refl_b04': 'sur_refl_b04', 'sur_refl_b05': 'sur_refl_b05', 'sur_refl_b06': 'sur_refl_b06', 'sur_refl_b07': 'sur_refl_b07'}
     """
     commonBandsDict = {k: PRODUCT_SPECS[productID]["bandList"][v] for k, v in PRODUCT_SPECS[productID]["commonBands"].items() if v >= 0}
     spectralBandsList = [PRODUCT_SPECS[productID]["bandList"][v] for v in PRODUCT_SPECS[productID]["spectralBandInds"]]
@@ -106,10 +115,10 @@ def getSpectralBands(productID:int) -> dict:
 
 
 # Mask bad pixels based on the respective "pixel quality assurance" layer.
-def qaMask_collection(productID, imageCollection, addBand = False):
+def qaMask_collection(productID:int, imageCollection:ee.ImageCollection, addBand:bool = False):
     """
     Retorna a uma coleção de imagens baseada na definição de qualidade pixel
-    determinada pelo usuário
+    determinada pelo usuário.
     """
     qaLayerName = PRODUCT_SPECS[productID]["qaLayer"]
 
@@ -130,54 +139,64 @@ def qaMask_collection(productID, imageCollection, addBand = False):
         startBit = [0, 6, 8]
         endBit = [2, 7, 9]
         testExpression = ["b(0) == 0", "b(0) < 2", "b(0) == 0"]
+
     # Sentinel-2 L2A
     elif productID == 201:
         qaLayer = [qaLayerName[0]]
         startBit = [0]
         endBit = [7]
         testExpression = ["b(0) >= 4 && b(0) <= 7"]
+
     # Sentinel-2 L1C
     elif productID == 202:
         qaLayer = [qaLayerName[0]]
         startBit = [10]
         endBit = [11]
         testExpression = ["b(0) == 0"]
+
     # Landsat 5 and 7 SR Collection 1
     elif productID in [301,302]:
         qaLayer = [qaLayerName[0]]
         startBit = [3]
         endBit = [5]
         testExpression = ["b(0) == 0"]
+
     # Landsat 8 SR Collection 1
     elif productID in [303]:
         qaLayer = [qaLayerName[0],qaLayerName[1]]
         startBit = [3,6]
         endBit = [5,7]
         testExpression = ["b(0) == 0", "b(0) <= 1"]
+
     # Landsat 4, 5 and 7 Level 2 Collection 2
     elif productID in [311,312,313]:
         qaLayer = [qaLayerName[0]]
         startBit = [1]
         endBit = [5]
         testExpression = ["b(0) == 0"]
+
     # Landsat 8 and 9 Level 2 Collection 2
     elif productID in [314,315]:
         qaLayer = [qaLayerName[0],qaLayerName[1]]
         startBit = [1,6]
         endBit = [5,7]
         testExpression = ["b(0) == 0", "b(0) <= 1"]
+
     # VIIRS
     elif productID in [151,152]:
         qaLayer = [qaLayerName[0],qaLayerName[1]]
         startBit = [2,3]
         endBit = [4,7]
         testExpression = ["b(0) == 0", "b(0) == 0"]
+
     else:
+
         if addBand:
             return ee.ImageCollection(imageCollection).map(
                 lambda image: image.addBands(
                     ee.Image(1).rename("qa_mask"))
                     )
+        
         else:
             return ee.ImageCollection(imageCollection)
     
@@ -202,8 +221,21 @@ def qaMask_collection(productID, imageCollection, addBand = False):
 
 
 # Get the dates of the images in the collection which match AOI and user dates.
-def getAvailableDates(productID:int, dateList:list):
-    """Retorna algo que eu ainda não descobri"""
+def getAvailableDates(productID:int, dateList:list) -> list:
+    """
+    Retorna um array de valores da propriedade "img_date" de cada imagem da coleção de imagens.
+    
+    Args:
+        productID: Identificação do produto espectral.
+        dateList: Lista de datas para verificação de dados disponíveis
+    
+    Returns:
+        Um array com valores da propriedade "img_date" de cada imagem da coleção de imagens. 
+
+    Examples:
+        >>> getAvailableDates(101, ['2020-01-01'])
+        
+    """
     aoi = None
     dateMin = dateList[0]
     dateMax = (pd.Timestamp(dateList[-1]) 
@@ -1614,6 +1646,43 @@ def reduction(reducer, productID, aoi=None):
     #print("Successful retrieval.")
     return result
 
+def loadInputDF(running_mode, input_file, input_path, input_dir):       
+    if running_mode < 3:
+        # If a kml was pointed as input file...
+        if input_file[-4:] == ".kml":
+            print("Building input data frame...")
+            aoi_mode = "kml"
+            running_mode = 2
+            
+            if input_file == "*.kml":
+                kmlFiles = [f for f in os.listdir(input_dir) if os.path.isfile(os.path.join(input_dir, f)) and f[-4:] == ".kml"]
+            else:
+                kmlFiles = [input_file]
+            user_df = pd.DataFrame(columns = ["id","start_date","end_date"])
+            nKmlFiles = len(kmlFiles)
+            if nKmlFiles == 0:
+                print("(!) No kml file was found in the folder '" + input_dir + "'.")
+                sys.exit(1)
+            for i in range(nKmlFiles):
+                siteID = kmlFiles[i][:-4]
+                user_df.loc[i] = [siteID, "auto", None]
+        else:
+            print("Opening the input file...")
+            # Read the CSV file.
+            try:
+                user_df = pd.read_csv(input_path)
+                print(user_df.dtypes)
+
+            except Exception as e:
+                print("(!) Could not read the input file.")
+                raise Exception(e)
+        input_df = user_df.copy()
+        colnames = [c.lower() for c in [*input_df.columns]]
+        if all(col in colnames for col in ["start_date", "end_date"]) and running_mode == 0:
+            running_mode = 2
+        elif running_mode == 0:
+            running_mode = 1
+
 # Convert a 'date-ranges' to a 'specific-dates' data frame.
 def toSpecificDatesDF(input_df):
     """
@@ -2124,4 +2193,3 @@ def specificDatesRetrieval(
         resultDF = None
     
     return resultDF
-

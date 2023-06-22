@@ -762,13 +762,13 @@ def unfoldProcessingCode(fullCode:int, silent:bool = False):
     seleção de pixels e no algorítmo de inversão.
 
     Args:
-        fullCode: Código de execução GEEDaR
+        fullCode: Código de execução GEEDaR.
     
     Returns:
         Uma tupla com os códigos de processamento, ID dos produtos, algoritmos de processamento e estimação e redutores.
         
     Examples:
-        >>>unfoldProcessingCode(90114001)
+        >>> unfoldProcessingCode(90114001)
         ([90114001], [901], [14], [0], [1])
     """
     failValues = (None, None, None, None, None)

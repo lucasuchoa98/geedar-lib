@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "geedar-lib"
 version = "0.1.0"
-description = ""
+description = "Este script destina-se a recuperar dados do Google Earth Engine."
 authors = ["lucasuchoa98 <lucasuchoalg@gmail.com>"]
 readme = "README.md"
 packages = [{include = "geedar_lib"}]
@@ -23,6 +23,8 @@ python = "^3.9"
 pandas = "^2.0.0"
 fastkml = "^0.12"
 earthengine-api = "^0.1.348"
+typer = "^0.9.0"
+rich = "^13.4.2"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -46,8 +48,6 @@ pythonpath = "."
 addopts = "--doctest-modules"
 
 [tool.taskipy.tasks]
-lint = "isort --check --diff"
 docs = "mkdocs serve"
-pre_test = "task lint"
 test = "pytest -s -x --cov=geedar_lib -vv"
 post_test = "coverage html"
